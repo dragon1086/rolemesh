@@ -30,6 +30,8 @@
 - [x] IntentGate(clarify/proceed) 추가
 - [x] contract artifact 생성(feature_manifest/handoff)
 - [x] autoevo convergence brake + resume 조건
+- [x] rolemesh-build를 정적 BATCHES에서 동적 backlog-state 생성으로 전환
+- [x] 추상 `Builder Prototype Tasks` 제거(legacy-abstract-disabled)
 - [x] Rules/Skills weekly cleanup 리포트 스크립트
 검증:
 - [ ] 주간 평균 점수 >= 85
