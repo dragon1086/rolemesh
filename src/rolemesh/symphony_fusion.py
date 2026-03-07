@@ -93,6 +93,21 @@ class SymphonyMACRS:
     def _delegate_to_cokac(self, item: WorkItem) -> tuple[str, dict[str, Any]]:
         """cokac-bot에게 위임 (Obsidian comms 스크립트 사용)."""
         script = os.path.expanduser("~/.claude/scripts/claude-comms/send-message.sh")
+
+        # 중복 방지: RoleMesh Builder 요청이 이미 inbox에 있으면 추가 발송 생략
+        try:
+            inbox_dir = os.path.expanduser("~/obsidian-vault/.claude-comms/cokac-bot/inbox")
+            if "RoleMesh Builder 실행안" in item.title and os.path.isdir(inbox_dir):
+                pending = [p for p in os.listdir(inbox_dir) if p.endswith('.md')]
+                if pending:
+                    return "delegated", {
+                        "dedup": True,
+                        "reason": "pending cokac inbox exists",
+                        "pending_count": len(pending),
+                    }
+        except Exception:
+            pass
+
         msg = (
             f"[Symphony-MACRS WorkItem]\n"
             f"id: {item.id}\n"
