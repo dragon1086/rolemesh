@@ -18,6 +18,7 @@ Multi-Agent Capability Registry System
 
 import json
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -47,6 +48,15 @@ def _get_openai_api_key() -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+def _normalize_task_title(title: str) -> str:
+    t = (title or "").strip().lower()
+    # [RB12], [R3] 같은 라운드 prefix 제거
+    t = re.sub(r"^\[(rb|r)\d+\]\s*", "", t)
+    t = re.sub(r"\s+", " ", t)
+    return t
+
 
 
 @dataclass
@@ -219,7 +229,7 @@ class RegistryClient:
         )
 
         payload = {
-            "model": "gpt-5.2",
+            "model": "gpt-5.4",
             "messages": [
                 {
                     "role": "system",
@@ -694,9 +704,44 @@ class RegistryClient:
         priority: int = 5,
         source: str = "manual",
     ) -> str:
-        """태스크 큐에 추가. task_id(UUID) 반환."""
-        task_id = str(uuid.uuid4())
+        """태스크 큐에 추가. task_id(UUID) 반환.
+
+        중복/추상 요청 방지:
+        - 동일 의미 제목(normalized) + pending/running 이면 기존 task_id 반환
+        - rolemesh Builder Prototype 추상 요청은 차단
+        """
         conn = self._conn_ctx()
+        norm_title = _normalize_task_title(title)
+        desc = (description or "").strip()
+
+        # 1) admission gate: 반복되는 추상 coding 요청 차단
+        if source in ("rolemesh-build", "rolemesh-autoevo") and kind == "coding":
+            if "builder prototype tasks" in norm_title:
+                generic_markers = [
+                    "실행 가능한 구현 태스크 분해",
+                    "구현 태스크 분해",
+                    "실행 가능한",
+                ]
+                is_generic = (len(desc) < 40) or any(m in desc for m in generic_markers)
+                if is_generic:
+                    raise ValueError("enqueue blocked: coding task spec too generic. required: (1) target files/modules (2) feature list (3) input/output spec (4) acceptance tests")
+
+        # 2) semantic dedupe: 같은 의미 제목의 활성 태스크 재생성 방지
+        rows = conn.execute(
+            """
+            SELECT id, title FROM task_queue
+            WHERE source = ? AND status IN ('pending','running')
+            ORDER BY created_at DESC
+            LIMIT 200
+            """,
+            (source,),
+        ).fetchall()
+        for r in rows:
+            if _normalize_task_title(r["title"]) == norm_title:
+                print(f"[queue] deduped: reuse {r['id']} — {title}")
+                return r["id"]
+
+        task_id = str(uuid.uuid4())
         conn.execute("""
             INSERT INTO task_queue (id, title, description, kind, status, priority, source, created_at)
             VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)

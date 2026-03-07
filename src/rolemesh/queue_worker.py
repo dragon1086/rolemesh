@@ -23,6 +23,43 @@ from symphony_fusion import SymphonyMACRS, WorkItem
 
 PID_FILE = "/tmp/macrs_worker.pid"
 POLL_INTERVAL = 30  # seconds
+DONE_EVENT_COOLDOWN_SEC = 120
+DONE_EVENT_STATE = '/tmp/rolemesh-done-event.last'
+
+# 완료 알림 티어링: 사용자/수동 트리거만 즉시 알림, 자동 루프는 무음(라운드 요약에 위임)
+NOISY_SOURCES = {"rolemesh-autoevo", "rolemesh-build", "paper-autoevo"}
+
+
+def _should_notify_done(task: dict) -> bool:
+    source = (task.get("source") or "manual").strip()
+    priority = int(task.get("priority") or 0)
+    # high priority는 즉시 알림 허용
+    if priority >= 9:
+        return True
+    # 자동 루프 source는 done 이벤트 무음
+    if source in NOISY_SOURCES:
+        return False
+    # 그 외(수동/외부 요청)는 알림
+    return True
+
+
+
+
+def _allow_done_event() -> bool:
+    now = int(time.time())
+    try:
+        if os.path.exists(DONE_EVENT_STATE):
+            last = int(open(DONE_EVENT_STATE).read().strip() or '0')
+            if now - last < DONE_EVENT_COOLDOWN_SEC:
+                return False
+    except Exception:
+        pass
+    try:
+        with open(DONE_EVENT_STATE, 'w') as f:
+            f.write(str(now))
+    except Exception:
+        pass
+    return True
 
 
 def _send_openclaw_event(text: str) -> None:
@@ -59,8 +96,8 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             summary = " | ".join(summaries)
 
         client.complete_task(task_id, summary=summary[:500])
-        # 대화 블로킹 방지: 자율진화(rolemesh-autoevo) 완료 이벤트는 기본적으로 무음
-        if source != "rolemesh-autoevo":
+        # 완료 알림 티어링 적용
+        if _should_notify_done(task) and _allow_done_event():
             _send_openclaw_event(f"Done: [{task['title']}] {summary[:200]}")
         print(f"[worker] 완료: {task_id}")
     except Exception as e:
