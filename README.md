@@ -2,16 +2,20 @@
 
 Role-first local AI orchestration for non-developers.
 
-## Vision
-- Default bundle: **OpenClaw (PM)** + **cokac (Builder)** + **amp (Analyst)** + Telegram
-- Installer wizard for non-developers (10-15 min setup)
-- Rule-first routing with optional LLM assist
+## Current Status
+- ✅ Documentation baseline (PRD, architecture, routing, UX, tests)
+- ✅ Core implementation migrated under `src/rolemesh/`
+  - registry + routing
+  - queue worker
+  - message bus worker
+  - auto-evolution worker + controls
 
-## Docs
-- [PRD](docs/PRD.md)
-- [Routing Spec](docs/Routing-Spec.md)
-- [Installer UX](docs/Installer-UX.md)
-- [Phase Plan](docs/Phase-Plan.md)
+## Structure
+- `src/rolemesh/` core modules
+- `scripts/` runtime scripts
+- `docs/` product and architecture docs
 
-## Status
-Draft v0.1 — documentation-first phase.
+## Next
+- tighten imports/package layout
+- add unit tests and E2E smoke tests
+- installer wizard (`rolemesh init`)
