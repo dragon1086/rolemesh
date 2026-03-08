@@ -6,9 +6,12 @@ set -euo pipefail
 
 PYTHON=/opt/homebrew/bin/python3
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
-
-export PYTHONPATH="$PROJECT/src"
+if [[ -n "${PYTHONPATH:-}" ]]; then
+  export PYTHONPATH="$PROJECT/src:$PYTHONPATH"
+else
+  export PYTHONPATH="$PROJECT/src"
+fi
 
 cd "$PROJECT"
 
-exec "$PYTHON" -m rolemesh.installer "$@"
+exec "$PYTHON" -m rolemesh.cli.installer "$@"

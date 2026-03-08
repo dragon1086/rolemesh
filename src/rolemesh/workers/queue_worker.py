@@ -98,6 +98,22 @@ def _is_delegated_only_result(summary: str) -> bool:
 
 def _verification_failed_msg(summary: str) -> str:
     return "verification_failed: delegated-only result (no proof). raw=" + (summary or "")[:180]
+
+
+def _is_timeout_error(exc: BaseException) -> bool:
+    return isinstance(exc, (TimeoutError, subprocess.TimeoutExpired))
+
+
+def _format_task_error(exc: BaseException) -> str:
+    if isinstance(exc, subprocess.TimeoutExpired):
+        cmd = exc.cmd if isinstance(exc.cmd, str) else " ".join(map(str, exc.cmd or ()))
+        return f"timeout: cmd={cmd} after {exc.timeout}s"
+    if isinstance(exc, TimeoutError):
+        msg = str(exc).strip()
+        return f"timeout: {msg}" if msg else "timeout"
+    return str(exc)
+
+
 def _allow_done_event() -> bool:
     now = int(time.time())
     try:
@@ -241,7 +257,8 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             print(f"[worker] 완료: {task_id}")
     except Exception as e:
         _router.record_failure(provider)
-        error_msg = str(e)[:300]
+        timed_out = _is_timeout_error(e)
+        error_msg = _format_task_error(e)[:300]
         retry_count = int(task.get("retry_count") or 0)
         max_retries = 3
 
@@ -249,7 +266,7 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             delay = 30 * (2 ** retry_count)  # 30s → 60s → 120s
             client.retry_task(task_id, retry_count + 1, delay)
             print(
-                f"[worker] 재시도 예약: {task_id} "
+                f"[worker] {'타임아웃' if timed_out else '재시도'} 예약: {task_id} "
                 f"(시도 {retry_count + 1}/{max_retries}, {delay}s 후) — {error_msg}",
                 file=sys.stderr,
             )
@@ -257,11 +274,14 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             client.move_to_dlq(task_id, error_msg)
             try:
                 _send_openclaw_event(
-                    f"DLQ: [{task['title']}] retry 소진 — {error_msg[:150]}"
+                    f"DLQ: [{task['title']}] {'timeout' if timed_out else 'retry'} 소진 — {error_msg[:150]}"
                 )
             except Exception:
                 pass
-            print(f"[worker] DLQ(retry 소진): {task_id} — {error_msg}", file=sys.stderr)
+            print(
+                f"[worker] DLQ({'timeout' if timed_out else 'retry'} 소진): {task_id} — {error_msg}",
+                file=sys.stderr,
+            )
 
 
 DEFAULT_DB_PATH = os.path.expanduser("~/ai-comms/registry.db")

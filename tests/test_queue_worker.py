@@ -3,6 +3,7 @@ tests/test_queue_worker.py
 retry 카운터 증가 / retry 소진 시 DLQ 이동 단위 테스트
 """
 import sqlite3
+import subprocess
 import time
 import pytest
 from unittest.mock import MagicMock, patch
@@ -102,6 +103,31 @@ def test_retry_exhausted_includes_error_message(client, orchestrator):
 
     reason_arg = client.move_to_dlq.call_args[0][1]
     assert "specific error message" in reason_arg
+
+
+def test_timeout_failure_retries_with_timeout_reason(client, orchestrator):
+    """타임아웃 예외는 timeout prefix로 재시도 사유를 남긴다."""
+    orchestrator.run_goal.side_effect = TimeoutError("provider stalled")
+    task = make_task(retry_count=1)
+
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"):
+        _run_task(task, orchestrator, client)
+
+    client.retry_task.assert_called_once_with("test-task-id", 2, 60)
+    client.move_to_dlq.assert_not_called()
+
+
+def test_timeout_expired_exhausted_moves_to_dlq_with_timeout_reason(client, orchestrator):
+    """subprocess timeout 소진 시 DLQ 사유에 timeout 정보가 포함된다."""
+    orchestrator.run_goal.side_effect = subprocess.TimeoutExpired(cmd=["worker"], timeout=90)
+    task = make_task(retry_count=3)
+
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"):
+        _run_task(task, orchestrator, client)
+
+    reason_arg = client.move_to_dlq.call_args[0][1]
+    assert "timeout:" in reason_arg
+    assert "after 90s" in reason_arg
 
 
 # ── 성공 시 retry/DLQ 없음 ───────────────────────────────────
