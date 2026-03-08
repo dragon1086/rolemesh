@@ -20,10 +20,13 @@ import time
 
 from .registry_client import RegistryClient
 from .symphony_fusion import SymphonyMACRS, WorkItem
+from .provider_router import ProviderRouter
+from .throttle import TokenBucketThrottle
 
 
 PID_FILE = "/tmp/macrs_worker.pid"
 POLL_INTERVAL = 30  # seconds
+THROTTLE_MAX_RETRIES = 3  # max waits before rescheduling task
 DONE_EVENT_COOLDOWN_SEC = 120
 DONE_EVENT_STATE = '/tmp/rolemesh-done-event.last'
 
@@ -121,12 +124,62 @@ def _send_openclaw_event(text: str) -> None:
     )
 
 
+_router = ProviderRouter()
+_throttle = TokenBucketThrottle()
+
+
+def _select_provider_with_throttle(task_id: str, client: RegistryClient) -> str | None:
+    """Pick an available provider respecting CB + throttle.
+
+    Returns provider name, or None if all providers are exhausted
+    (caller should reschedule the task).
+    """
+    from .provider_router import FALLBACK_PROVIDER
+
+    for attempt in range(THROTTLE_MAX_RETRIES):
+        provider = _router.route()
+        if provider == FALLBACK_PROVIDER:
+            # All circuits OPEN — no point throttle-retrying
+            print(
+                f"[worker] 모든 provider OPEN → 재스케줄: {task_id}",
+                file=sys.stderr,
+            )
+            return None
+
+        result = _throttle.acquire(provider)
+        if result is True:
+            return provider
+
+        wait_sec = float(result)
+        print(
+            f"[worker] throttle wait {wait_sec:.1f}s (attempt {attempt + 1}/{THROTTLE_MAX_RETRIES})"
+            f" provider={provider} task={task_id}",
+            file=sys.stderr,
+        )
+        time.sleep(wait_sec)
+
+    # Throttle exhausted after retries
+    print(
+        f"[worker] throttle 소진 → 재스케줄: {task_id}",
+        file=sys.stderr,
+    )
+    return None
+
+
 def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -> None:
     task_id = task["id"]
     goal = task.get("description") or task["title"]
     kind = task.get("kind")
     source = task.get("source") or "manual"
-    print(f"[worker] 실행: {task_id} ({task['title']})")
+
+    # ── Provider 선택 (CB + Throttle) ──────────────────────────────
+    provider = _select_provider_with_throttle(task_id, client)
+    if provider is None:
+        client.retry_task(task_id, int(task.get("retry_count") or 0) + 1, 60)
+        print(f"[worker] 재스케줄(provider 없음): {task_id}", file=sys.stderr)
+        return
+
+    print(f"[worker] 실행: {task_id} ({task['title']}) via {provider}")
 
     try:
         if kind and kind != "auto":
@@ -143,6 +196,7 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             summaries = [r["summary"] for r in out.get("results", [])]
             summary = " | ".join(summaries)
 
+        _router.record_success(provider)
         report = _extract_done_report_v1(summary)
 
         if _is_delegated_only_result(summary):
@@ -185,6 +239,7 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             client.complete_task(task_id, summary=summary[:500])
             print(f"[worker] 완료: {task_id}")
     except Exception as e:
+        _router.record_failure(provider)
         error_msg = str(e)[:300]
         retry_count = int(task.get("retry_count") or 0)
         max_retries = 3
