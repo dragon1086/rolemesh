@@ -2,7 +2,20 @@
 __main__.py — python3 -m rolemesh <command> 진입점
 """
 
+from __future__ import annotations
+
 import sys
+
+
+class CLIError(Exception):
+    def __init__(self, message: str, exit_code: int = 1):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+class CLIUsageError(CLIError):
+    def __init__(self, message: str):
+        super().__init__(message, exit_code=2)
 
 
 def _usage():
@@ -19,6 +32,18 @@ def _usage():
     print("  integration list   — 등록된 통합 목록 출력")
     print("  integration remove — 통합 삭제  예: python3 -m rolemesh integration remove --name mybot")
     print()
+
+
+def _usage_error(message: str) -> None:
+    raise CLIUsageError(message)
+
+
+def _parse_args(parser, args: list[str]):
+    try:
+        return parser.parse_args(args)
+    except SystemExit:
+        detail = parser.format_usage().strip()
+        raise CLIUsageError(detail) from None
 
 
 def _cmd_init():
@@ -78,7 +103,10 @@ def _cmd_suggest(args: list[str]) -> None:
 
     parser = argparse.ArgumentParser(prog="rolemesh suggest", add_help=False)
     parser.add_argument("--stack", default=None, help="도구 목록 (쉼표 구분). 미지정 시 자동 탐지.")
-    parsed = parser.parse_args(args)
+    if args and args[0] in ("-h", "--help"):
+        print(parser.format_usage().strip())
+        return
+    parsed = _parse_args(parser, args)
 
     mapper = RoleMapper()
     if parsed.stack:
@@ -111,11 +139,10 @@ def _cmd_suggest(args: list[str]) -> None:
 def _cmd_integration(args: list[str]) -> None:
     """integration <add|list|remove> 서브커맨드 처리."""
     import os
-    from ..routing.integration import IntegrationManager, DuplicateIntegrationError, IntegrationNotFoundError
+    from ..routing.integration import IntegrationManager
 
     if not args:
-        print("사용법: python3 -m rolemesh integration <add|list|remove>")
-        sys.exit(1)
+        _usage_error("사용법: python3 -m rolemesh integration <add|list|remove>")
 
     subcmd = args[0]
     db_path = os.environ.get("ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db"))
@@ -129,9 +156,7 @@ def _cmd_integration(args: list[str]) -> None:
         elif subcmd == "remove":
             _integration_remove(mgr, args[1:])
         else:
-            print(f"알 수 없는 서브커맨드: {subcmd}")
-            print("사용법: python3 -m rolemesh integration <add|list|remove>")
-            sys.exit(1)
+            _usage_error(f"알 수 없는 서브커맨드: {subcmd}\n사용법: python3 -m rolemesh integration <add|list|remove>")
     finally:
         mgr.close()
 
@@ -148,7 +173,10 @@ def _integration_add(mgr, args: list[str]) -> None:
     parser.add_argument("--cmd", default="", help="실행 명령 (예: 'gemini -p', 'amp --task')")
     parser.add_argument("--provider", default="", help="Throttle/CB provider 이름 (예: gemini, openai, anthropic)")
     parser.add_argument("--no-auto-script", action="store_true", help="delegate.sh 자동 생성 비활성화")
-    parsed = parser.parse_args(args)
+    if args and args[0] in ("-h", "--help"):
+        print(parser.format_usage().strip())
+        return
+    parsed = _parse_args(parser, args)
 
     caps = [c.strip() for c in parsed.capabilities.split(",") if c.strip()] if parsed.capabilities else []
     auto_script = not parsed.no_auto_script
@@ -193,10 +221,12 @@ def _integration_list(mgr) -> None:
 def _integration_remove(mgr, args: list[str]) -> None:
     """integration remove --name X"""
     import argparse
-    from ..routing.integration import IntegrationNotFoundError
     parser = argparse.ArgumentParser(prog="rolemesh integration remove", add_help=False)
     parser.add_argument("--name", required=True, help="삭제할 에이전트 이름")
-    parsed = parser.parse_args(args)
+    if args and args[0] in ("-h", "--help"):
+        print(parser.format_usage().strip())
+        return
+    parsed = _parse_args(parser, args)
 
     try:
         mgr.remove(parsed.name)
@@ -208,31 +238,40 @@ def _integration_remove(mgr, args: list[str]) -> None:
 
 def main():
     args = sys.argv[1:]
-    if not args or args[0] in ("-h", "--help"):
-        _usage()
-        return
+    try:
+        if not args or args[0] in ("-h", "--help"):
+            _usage()
+            return
 
-    cmd = args[0]
-    if cmd == "init":
-        _cmd_init()
-    elif cmd == "agents":
-        _cmd_agents()
-    elif cmd == "status":
-        _cmd_status()
-    elif cmd == "route":
-        if len(args) < 2:
-            print("사용법: python3 -m rolemesh route '<task>'")
+        cmd = args[0]
+        if cmd == "init":
+            _cmd_init()
+        elif cmd == "agents":
+            _cmd_agents()
+        elif cmd == "status":
+            _cmd_status()
+        elif cmd == "route":
+            if len(args) < 2:
+                _usage_error("사용법: python3 -m rolemesh route '<task>'")
+            _cmd_route(args[1])
+        elif cmd == "suggest":
+            _cmd_suggest(args[1:])
+        elif cmd == "integration":
+            if len(args) < 2:
+                _usage_error("사용법: python3 -m rolemesh integration <add|list|remove> [options]")
+            _cmd_integration(args[1:])
+        else:
+            print(f"알 수 없는 명령: {cmd}")
+            _usage()
             sys.exit(1)
-        _cmd_route(args[1])
-    elif cmd == "suggest":
-        _cmd_suggest(args[1:])
-    elif cmd == "integration":
-        if len(args) < 2:
-            print("사용법: python3 -m rolemesh integration <add|list|remove> [options]")
-            sys.exit(1)
-        _cmd_integration(args[1:])
-    else:
-        print(f"알 수 없는 명령: {cmd}")
+    except CLIError as exc:
+        print(exc)
+        sys.exit(exc.exit_code)
+    except KeyboardInterrupt:
+        print("중단됨.")
+        sys.exit(130)
+    except Exception as exc:
+        print(f"실행 실패: {exc.__class__.__name__}: {exc}")
         _usage()
         sys.exit(1)
 

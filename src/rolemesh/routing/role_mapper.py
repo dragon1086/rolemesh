@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+from collections.abc import Iterable, Mapping
 from typing import TypedDict
 
 
@@ -90,10 +91,15 @@ _TOOL_ROLE_MAP: list[dict] = [
 class RoleMapper:
     """시스템 도구 탐지 → 역할 자동 매핑."""
 
-    def _normalize_stack(self, stack: list[str] | None) -> list[str]:
+    def _normalize_stack(self, stack: list[str] | str | None) -> list[str]:
         """입력 스택을 소문자/별칭 기준으로 정규화하고 중복 제거."""
         if not stack:
             return []
+
+        if isinstance(stack, str):
+            raw_stack: Iterable[object] = stack.split(",")
+        else:
+            raw_stack = stack
 
         aliases = {
             "python": "python3",
@@ -103,7 +109,7 @@ class RoleMapper:
         normalized: list[str] = []
         seen: set[str] = set()
 
-        for raw in stack:
+        for raw in raw_stack:
             if raw is None:
                 continue
             tool = str(raw).strip().lower()
@@ -118,6 +124,28 @@ class RoleMapper:
             normalized.append(tool)
 
         return normalized
+
+    def _sanitize_suggestion(self, suggestion: Mapping[str, object]) -> RoleSuggestion | None:
+        """외부 입력 suggestion을 안전한 RoleSuggestion 포맷으로 정규화."""
+        role = str(suggestion.get("role", "")).strip()
+        agent = str(suggestion.get("agent", "")).strip()
+        reason = str(suggestion.get("reason", "")).strip()
+
+        if not role or not agent or not reason:
+            return None
+
+        try:
+            confidence = float(suggestion.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            return None
+
+        confidence = max(0.0, min(1.0, confidence))
+        return RoleSuggestion(
+            role=role,
+            agent=agent,
+            confidence=confidence,
+            reason=reason,
+        )
 
     # ── 탐지 ──────────────────────────────────────────────────────
 
@@ -152,7 +180,7 @@ class RoleMapper:
 
     # ── 추천 ──────────────────────────────────────────────────────
 
-    def suggest_roles(self, stack: list[str] | None) -> list[RoleSuggestion]:
+    def suggest_roles(self, stack: list[str] | str | None) -> list[RoleSuggestion]:
         """스택 기반 역할 추천 목록 반환.
 
         Args:
@@ -184,7 +212,7 @@ class RoleMapper:
             return resolved
         return list(_FALLBACK_SUGGESTIONS)
 
-    def suggest(self, stack: list[str] | None = None) -> list[RoleSuggestion]:
+    def suggest(self, stack: list[str] | str | None = None) -> list[RoleSuggestion]:
         """하위 호환용 별칭."""
         return self.suggest_roles(stack)
 
@@ -207,9 +235,15 @@ class RoleMapper:
         # 역할별로 confidence 최고 항목 선택
         role_best: dict[str, RoleSuggestion] = {}
         for s in suggestions:
-            role = s["role"]
-            if role not in role_best or s["confidence"] > role_best[role]["confidence"]:
-                role_best[role] = s
+            if not isinstance(s, Mapping):
+                continue
+            normalized = self._sanitize_suggestion(s)
+            if normalized is None:
+                continue
+
+            role = normalized["role"]
+            if role not in role_best or normalized["confidence"] > role_best[role]["confidence"]:
+                role_best[role] = normalized
 
         # 우선순위 → confidence 내림차순 정렬
         return sorted(

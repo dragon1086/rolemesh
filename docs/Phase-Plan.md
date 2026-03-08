@@ -1,4 +1,4 @@
-# RoleMesh Phase Plan (v0.1)
+# RoleMesh Phase Plan (v0.2.1)
 
 ## Phase 0 — 문서/검토 (현재)
 - [x] PRD 초안
@@ -61,6 +61,7 @@
 - [x] 문서/예제/라이선스 (MIT LICENSE + CONTRIBUTING + Quickstart-Checklist) ← 2026-03-08
 검증:
 - [x] 외부 사용자 quickstart 통과 (162/162) ← 2026-03-08
+- [x] 전체 테스트 통과 (255/255) ← 2026-03-08
 
 ## Phase 2+ — 흐름 제어 (2026-03-08 추가)
 - [x] Provider Circuit Breaker (CLOSED/OPEN/HALF_OPEN 상태머신)
@@ -71,4 +72,5 @@
 - [x] ai-comms/rolemesh_build_autoloop Throttle 연동
 검증:
 - [x] 133/133 테스트 통과
+- [x] 255/255 테스트 통과 ← 2026-03-08
 - [ ] 실 운영 24h 모니터링
