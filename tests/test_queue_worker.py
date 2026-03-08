@@ -2,9 +2,11 @@
 tests/test_queue_worker.py
 retry 카운터 증가 / retry 소진 시 DLQ 이동 단위 테스트
 """
+import sqlite3
+import time
 import pytest
 from unittest.mock import MagicMock, patch
-from rolemesh.workers.queue_worker import _run_task
+from rolemesh.workers.queue_worker import _run_task, recover_stale
 
 
 @pytest.fixture(autouse=True)
@@ -116,3 +118,37 @@ def test_success_no_retry_no_dlq(client, orchestrator):
     client.retry_task.assert_not_called()
     client.move_to_dlq.assert_not_called()
     client.complete_task.assert_called_once()
+
+
+def test_recover_stale_requeues_old_running_tasks(tmp_path):
+    db_path = tmp_path / "worker.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE task_queue (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            status TEXT,
+            started_at REAL
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO task_queue (id, title, status, started_at) VALUES (?, ?, ?, ?)",
+        ("stale-1", "Old task", "running", time.time() - 4000),
+    )
+    conn.execute(
+        "INSERT INTO task_queue (id, title, status, started_at) VALUES (?, ?, ?, ?)",
+        ("fresh-1", "Fresh task", "running", time.time() - 10),
+    )
+    conn.commit()
+    conn.close()
+
+    recovered = recover_stale(stale_threshold_seconds=1800, db_path=str(db_path))
+
+    assert recovered == 1
+    check_conn = sqlite3.connect(db_path)
+    rows = dict(check_conn.execute("SELECT id, status FROM task_queue").fetchall())
+    check_conn.close()
+    assert rows["stale-1"] == "pending"
+    assert rows["fresh-1"] == "running"

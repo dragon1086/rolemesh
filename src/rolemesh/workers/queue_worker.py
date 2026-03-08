@@ -269,7 +269,7 @@ STALE_RECOVER_INTERVAL = 300  # recover_stale 주기(초): 5분마다 실행
 
 
 def recover_stale(stale_threshold_seconds: int = 1800, db_path: str = DEFAULT_DB_PATH) -> int:
-    """running 상태이고 updated_at이 stale_threshold_seconds 초 초과한 태스크를 pending으로 복귀.
+    """running 상태이고 started_at이 stale_threshold_seconds 초 초과한 태스크를 pending으로 복귀.
 
     반환값: 복구된 건수
     """
@@ -278,9 +278,9 @@ def recover_stale(stale_threshold_seconds: int = 1800, db_path: str = DEFAULT_DB
         conn = sqlite3.connect(db_path)
         try:
             cur = conn.execute(
-                "UPDATE tasks SET status='pending', updated_at=? "
-                "WHERE status='running' AND updated_at < ?",
-                (int(time.time()), cutoff),
+                "UPDATE task_queue SET status='pending', started_at=NULL "
+                "WHERE status='running' AND started_at < ?",
+                (cutoff,),
             )
             conn.commit()
             recovered = cur.rowcount

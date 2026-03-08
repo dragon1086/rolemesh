@@ -23,6 +23,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from .init_db import init_db
@@ -783,7 +784,7 @@ class RegistryClient:
         conn.execute("""
             INSERT INTO task_queue (id, title, description, kind, status, priority, source, created_at)
             VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
-        """, (task_id, title, description, kind, priority, source, time.time()))
+        """, (task_id, title, desc, kind, priority, source, time.time()))
         conn.commit()
         print(f"[queue] enqueued: {task_id} — {title}")
         return task_id

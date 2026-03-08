@@ -3,8 +3,11 @@ tests/test_registry_client.py
 queue_counts / move_to_dlq / retry_task 단위 테스트
 """
 import time
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
-from rolemesh.core.registry_client import RegistryClient
+from rolemesh.core.registry_client import RegistryClient, _hydrate_retry_description
 
 
 @pytest.fixture
@@ -109,3 +112,29 @@ def test_retry_task_run_after_not_dequeued_immediately(client):
     # run_after가 미래이므로 dequeue_next에서 나오지 않아야 함
     result = client.dequeue_next()
     assert result is None or result["id"] != task_id
+
+
+def test_enqueue_hydrates_retry_description_from_payload(client):
+    msg_id = "msg-20260101-120000"
+    hydrated = "full payload contents"
+    description = f"retry request for {msg_id}"
+
+    with patch("rolemesh.core.registry_client.os.path.exists", return_value=True), \
+         patch.object(Path, "read_text", return_value=hydrated):
+        task_id = client.enqueue("retry-task", description)
+
+    row = client._conn_ctx().execute(
+        "SELECT description FROM task_queue WHERE id = ?",
+        (task_id,),
+    ).fetchone()
+    assert hydrated in row["description"]
+    assert msg_id in row["description"]
+
+
+def test_hydrate_retry_description_reads_existing_payload():
+    msg_id = "msg-20260101-120000"
+    with patch("rolemesh.core.registry_client.os.path.exists", return_value=True), \
+         patch.object(Path, "read_text", return_value="hydrated body"):
+        result = _hydrate_retry_description(f"retry request for {msg_id}")
+
+    assert "hydrated body" in result

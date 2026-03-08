@@ -45,7 +45,9 @@ class IntegrationManager:
 
     def __init__(self, db_path: Optional[str] = None):
         self._db_path = db_path or DEFAULT_DB_PATH
-        os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
+        db_dir = os.path.dirname(self._db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
         self._client = RegistryClient(db_path=self._db_path)
 
     # ── public API ───────────────────────────────────────────────────────────
@@ -116,16 +118,17 @@ class IntegrationManager:
             endpoint=endpoint,
         )
 
-        caps = capabilities or []
+        caps = [cap.strip() for cap in (capabilities or []) if cap and cap.strip()]
+        if existing and allow_update:
+            self._replace_capabilities(name)
+
         for cap in caps:
-            cap = cap.strip()
-            if cap:
-                self._client.register_capability(
-                    agent_id=name,
-                    name=cap,
-                    description=f"{role} capability: {cap}",
-                    keywords=[cap],
-                )
+            self._client.register_capability(
+                agent_id=name,
+                name=cap,
+                description=f"{role} capability: {cap}",
+                keywords=[cap],
+            )
 
         result: dict = {
             "name": name,
@@ -280,3 +283,8 @@ class IntegrationManager:
             "SELECT name FROM capabilities WHERE agent_id = ?", (agent_id,)
         ).fetchall()
         return [r["name"] for r in rows]
+
+    def _replace_capabilities(self, agent_id: str) -> None:
+        conn = self._client._conn_ctx()
+        conn.execute("DELETE FROM capabilities WHERE agent_id = ?", (agent_id,))
+        conn.commit()

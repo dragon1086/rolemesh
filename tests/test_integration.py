@@ -2,6 +2,8 @@
 tests/test_integration.py
 IntegrationManager — add / list / remove 단위 테스트 (최소 8개)
 """
+import os
+
 import pytest
 from rolemesh.routing.integration import (
     IntegrationManager,
@@ -52,6 +54,26 @@ def test_add_duplicate_allow_update(mgr):
     assert info["endpoint"] == "http://localhost:9004"
 
 
+def test_add_duplicate_allow_update_replaces_capabilities(mgr):
+    mgr.add(
+        "upd-cap-bot",
+        role="builder",
+        endpoint="http://localhost:9003",
+        capabilities=["build", "deploy"],
+    )
+
+    info = mgr.add(
+        "upd-cap-bot",
+        role="builder",
+        endpoint="http://localhost:9004",
+        capabilities=["review"],
+        allow_update=True,
+    )
+
+    assert info["capabilities"] == ["review"]
+    assert mgr.get("upd-cap-bot")["capabilities"] == ["review"]
+
+
 def test_add_empty_name_raises(mgr):
     with pytest.raises(ValueError):
         mgr.add("", role="builder", endpoint="http://localhost:9000")
@@ -60,6 +82,17 @@ def test_add_empty_name_raises(mgr):
 def test_add_empty_endpoint_raises(mgr):
     with pytest.raises(ValueError):
         mgr.add("bot-x", role="builder", endpoint="")
+
+
+def test_init_with_relative_db_path():
+    local_mgr = IntegrationManager(db_path="relative-test.db")
+    try:
+        info = local_mgr.add("rel-bot", role="builder", endpoint="http://localhost:9000")
+        assert info["name"] == "rel-bot"
+    finally:
+        local_mgr.close()
+        if os.path.exists("relative-test.db"):
+            os.remove("relative-test.db")
 
 
 # ── list ──────────────────────────────────────────────────────────────────────
