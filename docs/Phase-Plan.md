@@ -56,11 +56,11 @@
 - [x] 신규 통합 후 라우팅 후보 자동 반영 ← 2026-03-08
 
 ## Phase 4 — OSS 패키징
-- [ ] core/workers/adapters 분리
+- [x] core/workers/adapters/routing/cli 분리 ← 2026-03-08
 - [x] 샘플 번들 배포 (examples/quickstart/) ← 2026-03-08
-- [ ] 문서/예제/라이선스
+- [x] 문서/예제/라이선스 (MIT LICENSE + CONTRIBUTING + Quickstart-Checklist) ← 2026-03-08
 검증:
-- [ ] 외부 사용자 quickstart 통과
+- [x] 외부 사용자 quickstart 통과 (162/162) ← 2026-03-08
 
 ## Phase 2+ — 흐름 제어 (2026-03-08 추가)
 - [x] Provider Circuit Breaker (CLOSED/OPEN/HALF_OPEN 상태머신)
