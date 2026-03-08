@@ -1,9 +1,13 @@
-# Delegation Protocol — PM → cokac 위임 표준
+# Delegation Protocol — PM → Builder 위임 표준
 
 ## 핵심 규칙
 
-**직접 `claude -p` 호출 절대 금지.**
-모든 위임은 `scripts/cokac-delegate.sh`를 통해야 한다.
+기본 빌더 경로는 `scripts/cokac-delegate.sh`이며,
+Anthropic rate limit 상황에서는 `scripts/codex-delegate.sh` fallback을 권장한다.
+
+빌더 옵션:
+- `cokac` (Claude Code): 기본 빌더 (Anthropic)
+- `codex`: 대체 빌더 (OpenAI) — Anthropic rate limit 시 자동 fallback 권장
 
 ---
 
@@ -16,6 +20,13 @@
               ├─ Circuit Breaker OPEN? → exit 1 (위임 차단)
               ├─ Throttle wait > 0?   → sleep 후 진행
               └─▶ claude [args]       ← 실제 실행
+
+록이(PM)
+  └─▶ scripts/codex-delegate.sh   ← OpenAI Codex 대체 진입점
+        ├─ BatchCooldown 체크
+        ├─ Circuit Breaker(provider=openai-codex) 체크
+        ├─ Throttle(provider=openai-codex) 체크
+        └─▶ codex exec -s danger-full-access --model gpt-5.3-codex -C <workdir> "<prompt>"
 ```
 
 ---
@@ -35,6 +46,9 @@ scripts/cokac-delegate.sh --dangerously-skip-permissions -p "자동화 작업"
 # claude-delegate.sh 직접 사용 (non-cokac 컨텍스트)
 scripts/claude-delegate.sh -p "질문"
 scripts/claude-delegate.sh --version
+
+# codex 빌더 위임 (OpenAI fallback)
+scripts/codex-delegate.sh -C /path/to/project "버그 수정해줘"
 ```
 
 ---
@@ -46,6 +60,7 @@ scripts/claude-delegate.sh --version
 ```yaml
 anthropic: 15   # 분당 15회 (Anthropic rate limit 여유 확보)
 openai: 20
+openai-codex: 30  # Codex Pro 기준 넉넉한 기본값
 gemini: 60
 ```
 
