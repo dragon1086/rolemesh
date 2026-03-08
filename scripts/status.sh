@@ -31,3 +31,35 @@ echo "--- Running Workers ---"
 ps aux | grep -E "rolemesh\.(queue_worker|message_worker|autoevo_worker)" | grep -v grep \
   | awk '{print $2, $11, $12}' \
   || echo "(실행 중인 워커 없음)"
+
+echo ""
+echo "--- Provider Circuit Breaker Status ---"
+for provider in anthropic openai gemini; do
+  STATE_FILE="/tmp/rolemesh-cb-${provider}.json"
+  if [[ ! -f "$STATE_FILE" ]]; then
+    echo "  ${provider}: CLOSED (no state file)"
+    continue
+  fi
+  STATE=$(python3 -c "
+import json, time, sys
+try:
+    d = json.load(open('${STATE_FILE}'))
+    state = d.get('state', 'CLOSED')
+    opened_at = int(d.get('opened_at', 0))
+    cooldown = int(d.get('cooldown_sec', 60))
+    now = int(time.time())
+    if state == 'OPEN':
+        elapsed = now - opened_at
+        if elapsed >= cooldown:
+            state = 'HALF_OPEN'
+            remaining = 0
+        else:
+            remaining = cooldown - elapsed
+        print(f'{state} (cooldown: {remaining}s 남음)' if remaining > 0 else f'{state}')
+    else:
+        print(state)
+except Exception as e:
+    print(f'ERROR: {e}')
+" 2>&1)
+  echo "  ${provider}: ${STATE}"
+done
