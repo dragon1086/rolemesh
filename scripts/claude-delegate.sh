@@ -33,7 +33,7 @@ CB_RESULT=$("$PYTHON" - <<'PYEOF'
 import sys
 sys.path.insert(0, '$REPO_ROOT/src')
 try:
-    from rolemesh.circuit_breaker import ProviderCircuitBreaker, CBState
+    from rolemesh.adapters.circuit_breaker import ProviderCircuitBreaker, CBState
     cb = ProviderCircuitBreaker()
     state = cb.get_state("$PROVIDER")
     remaining = cb.cooldown_remaining("$PROVIDER")
@@ -51,7 +51,7 @@ CB_RESULT=$("$PYTHON" -c "
 import sys
 sys.path.insert(0, '$REPO_ROOT/src')
 try:
-    from rolemesh.circuit_breaker import ProviderCircuitBreaker, CBState
+    from rolemesh.adapters.circuit_breaker import ProviderCircuitBreaker, CBState
     cb = ProviderCircuitBreaker()
     state = cb.get_state('$PROVIDER')
     remaining = cb.cooldown_remaining('$PROVIDER')
@@ -81,7 +81,7 @@ THROTTLE_RESULT=$("$PYTHON" -c "
 import sys
 sys.path.insert(0, '$REPO_ROOT/src')
 try:
-    from rolemesh.throttle import TokenBucketThrottle
+    from rolemesh.adapters.throttle import TokenBucketThrottle
     t = TokenBucketThrottle()
     result = t.acquire('$PROVIDER')
     if result is True:
