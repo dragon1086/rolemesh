@@ -30,7 +30,7 @@ def test_codex_delegate_contains_openai_codex_provider():
 
 def test_codex_delegate_contains_codex_exec_command():
     content = _content()
-    assert "codex exec -s danger-full-access --model gpt-5.3-codex -C" in content
+    assert "codex exec -s danger-full-access --model gpt-5.4 -C" in content
 
 
 def test_codex_delegate_records_batch_complete():
