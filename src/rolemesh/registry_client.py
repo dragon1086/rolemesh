@@ -769,9 +769,10 @@ class RegistryClient:
             """, (time.time(), row["id"]))
         return dict(row)
 
-    def complete_task(self, task_id: str, summary: str = "", error: str = None) -> None:
-        """태스크 완료(done) 또는 실패(failed) 처리."""
-        status = "failed" if error else "done"
+    def complete_task(self, task_id: str, summary: str = "", error: str = None, status: str = None) -> None:
+        """태스크 완료(done), 실패(failed), 또는 커스텀 상태 처리."""
+        if status is None:
+            status = "failed" if error else "done"
         conn = self._conn_ctx()
         conn.execute("""
             UPDATE task_queue

@@ -63,14 +63,13 @@ def _allow_done_event() -> bool:
 
 
 def _send_openclaw_event(text: str) -> None:
-    try:
-        subprocess.run(
-            ["openclaw", "system", "event", "--text", text, "--mode", "now"],
-            capture_output=True,
-            timeout=10,
-        )
-    except Exception:
-        pass  # openclaw 미설치 환경 무시
+    """openclaw 이벤트 전송. 실패 시 예외를 발생시킨다."""
+    subprocess.run(
+        ["openclaw", "system", "event", "--text", text, "--mode", "now"],
+        capture_output=True,
+        timeout=10,
+        check=True,
+    )
 
 
 def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -> None:
@@ -95,16 +94,33 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             summaries = [r["summary"] for r in out.get("results", [])]
             summary = " | ".join(summaries)
 
-        client.complete_task(task_id, summary=summary[:500])
-        # 완료 알림 티어링 적용
+        # 본체 성공 — announce 시도
+        announce_error = None
         if _should_notify_done(task) and _allow_done_event():
-            _send_openclaw_event(f"Done: [{task['title']}] {summary[:200]}")
-        print(f"[worker] 완료: {task_id}")
+            try:
+                _send_openclaw_event(f"Done: [{task['title']}] {summary[:200]}")
+            except Exception as ae:
+                announce_error = str(ae)[:300]
+
+        if announce_error:
+            client.complete_task(
+                task_id,
+                summary=summary[:500],
+                error=f"announce_failed: {announce_error}",
+                status="completed_with_announce_error",
+            )
+            print(f"[worker] 완료(announce 실패): {task_id} — {announce_error}", file=sys.stderr)
+        else:
+            client.complete_task(task_id, summary=summary[:500])
+            print(f"[worker] 완료: {task_id}")
     except Exception as e:
         error_msg = str(e)[:300]
         client.complete_task(task_id, error=error_msg)
         # 실패는 source와 무관하게 알림 유지
-        _send_openclaw_event(f"Failed: [{task['title']}] {error_msg}")
+        try:
+            _send_openclaw_event(f"Failed: [{task['title']}] {error_msg}")
+        except Exception:
+            pass  # 실패 알림도 전송 불가 시 무시
         print(f"[worker] 실패: {task_id} — {error_msg}", file=sys.stderr)
 
 
