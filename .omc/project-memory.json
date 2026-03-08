@@ -1,0 +1,389 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1772971182035,
+  "projectRoot": "/Users/rocky/rolemesh",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "pip",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "src"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "config": {
+      "path": "config",
+      "purpose": "Configuration files",
+      "fileCount": 0,
+      "lastAccessed": 1772971182020,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 9,
+      "lastAccessed": 1772971182020,
+      "keyFiles": [
+        "Architecture.md",
+        "Engineering-Rules.md",
+        "Installer-UX.md",
+        "MIGRATION.md",
+        "PRD.md"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 8,
+      "lastAccessed": 1772971182020,
+      "keyFiles": [
+        "autoevoctl.sh",
+        "cleanup_rules_skills_weekly.sh",
+        "run_autoevo.sh",
+        "run_message_worker.sh",
+        "run_queue_worker.sh"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1772971182021,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/rolemesh/queue_worker.py",
+      "accessCount": 40,
+      "lastAccessed": 1772976980067,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/__main__.py",
+      "accessCount": 26,
+      "lastAccessed": 1772977147106,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 24,
+      "lastAccessed": 1772976805322,
+      "type": "directory"
+    },
+    {
+      "path": "src/rolemesh/symphony_fusion.py",
+      "accessCount": 19,
+      "lastAccessed": 1772976133631,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/registry_client.py",
+      "accessCount": 19,
+      "lastAccessed": 1772976741287,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/init_db.py",
+      "accessCount": 14,
+      "lastAccessed": 1772974863239,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/autoevo_worker.py",
+      "accessCount": 13,
+      "lastAccessed": 1772976268658,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/__init__.py",
+      "accessCount": 12,
+      "lastAccessed": 1772974211796,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_queue_worker.py",
+      "accessCount": 12,
+      "lastAccessed": 1772976438106,
+      "type": "file"
+    },
+    {
+      "path": "conftest.py",
+      "accessCount": 12,
+      "lastAccessed": 1772977197189,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/amp_caller.py",
+      "accessCount": 9,
+      "lastAccessed": 1772976031167,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_claude_delegate.sh",
+      "accessCount": 8,
+      "lastAccessed": 1772975895063,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/circuit_breaker.py",
+      "accessCount": 8,
+      "lastAccessed": 1772976024131,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/installer.py",
+      "accessCount": 8,
+      "lastAccessed": 1772977122209,
+      "type": "file"
+    },
+    {
+      "path": "requirements.txt",
+      "accessCount": 6,
+      "lastAccessed": 1772971587765,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_e2e_smoke.py",
+      "accessCount": 6,
+      "lastAccessed": 1772974074472,
+      "type": "file"
+    },
+    {
+      "path": "scripts/status.sh",
+      "accessCount": 6,
+      "lastAccessed": 1772974601343,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_registry_client.py",
+      "accessCount": 6,
+      "lastAccessed": 1772974867993,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/throttle.py",
+      "accessCount": 6,
+      "lastAccessed": 1772976024392,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_circuit_breaker.py",
+      "accessCount": 6,
+      "lastAccessed": 1772976052932,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_symphony_fusion.py",
+      "accessCount": 6,
+      "lastAccessed": 1772976053135,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/provider_router.py",
+      "accessCount": 6,
+      "lastAccessed": 1772977049393,
+      "type": "file"
+    },
+    {
+      "path": "pytest.ini",
+      "accessCount": 6,
+      "lastAccessed": 1772977193366,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 5,
+      "lastAccessed": 1772974237238,
+      "type": "file"
+    },
+    {
+      "path": "scripts/start_all_workers.sh",
+      "accessCount": 4,
+      "lastAccessed": 1772971662994,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/message_worker.py",
+      "accessCount": 4,
+      "lastAccessed": 1772974301464,
+      "type": "file"
+    },
+    {
+      "path": "tests/__init__.py",
+      "accessCount": 4,
+      "lastAccessed": 1772974874191,
+      "type": "file"
+    },
+    {
+      "path": "pyproject.toml",
+      "accessCount": 4,
+      "lastAccessed": 1772974877801,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/integration.py",
+      "accessCount": 4,
+      "lastAccessed": 1772976168413,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh",
+      "accessCount": 4,
+      "lastAccessed": 1772976740970,
+      "type": "directory"
+    },
+    {
+      "path": "scripts/pm_quality_check.sh",
+      "accessCount": 4,
+      "lastAccessed": 1772976792973,
+      "type": "file"
+    },
+    {
+      "path": "scripts/run_queue_worker.sh",
+      "accessCount": 2,
+      "lastAccessed": 1772971190795,
+      "type": "file"
+    },
+    {
+      "path": "docs/Installer-UX.md",
+      "accessCount": 2,
+      "lastAccessed": 1772971648186,
+      "type": "file"
+    },
+    {
+      "path": "scripts/rolemesh-init.sh",
+      "accessCount": 2,
+      "lastAccessed": 1772971730500,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_installer.py",
+      "accessCount": 2,
+      "lastAccessed": 1772971785672,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_intentgate_regression.py",
+      "accessCount": 2,
+      "lastAccessed": 1772973962489,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_autoevo_pause_resume.py",
+      "accessCount": 2,
+      "lastAccessed": 1772973999520,
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 2,
+      "lastAccessed": 1772974187115,
+      "type": "directory"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "accessCount": 2,
+      "lastAccessed": 1772974242408,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/contracts.py",
+      "accessCount": 2,
+      "lastAccessed": 1772974525035,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_throttle.py",
+      "accessCount": 2,
+      "lastAccessed": 1772974778671,
+      "type": "file"
+    },
+    {
+      "path": "examples/quickstart/README.md",
+      "accessCount": 2,
+      "lastAccessed": 1772974999136,
+      "type": "file"
+    },
+    {
+      "path": "examples/quickstart/sample_config.yaml",
+      "accessCount": 2,
+      "lastAccessed": 1772975004578,
+      "type": "file"
+    },
+    {
+      "path": "examples/quickstart/run_demo.sh",
+      "accessCount": 2,
+      "lastAccessed": 1772975016897,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_integration.py",
+      "accessCount": 2,
+      "lastAccessed": 1772975037709,
+      "type": "file"
+    },
+    {
+      "path": "config/throttle.yaml",
+      "accessCount": 2,
+      "lastAccessed": 1772975719611,
+      "type": "file"
+    },
+    {
+      "path": "scripts/claude-delegate.sh",
+      "accessCount": 2,
+      "lastAccessed": 1772975753485,
+      "type": "file"
+    },
+    {
+      "path": "scripts/cokac-delegate.sh",
+      "accessCount": 2,
+      "lastAccessed": 1772975785277,
+      "type": "file"
+    },
+    {
+      "path": "docs/Delegation-Protocol.md",
+      "accessCount": 2,
+      "lastAccessed": 1772975811389,
+      "type": "file"
+    },
+    {
+      "path": "docs/Integration-Status.md",
+      "accessCount": 2,
+      "lastAccessed": 1772976202390,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

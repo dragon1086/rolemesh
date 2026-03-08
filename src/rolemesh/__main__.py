@@ -10,9 +10,11 @@ def _usage():
     print()
     print("Commands:")
     print("  init               — RoleMesh Installer Wizard 실행 (환경 탐지 + 에이전트 등록)")
+    print("  init --lite        — 라이트 모드: DB 초기화 + PM 역할만 등록")
     print("  agents             — 등록된 에이전트 목록 출력")
     print("  status             — 태스크 큐 상태 출력")
     print("  route              — 태스크 라우팅 조회  예: python3 -m rolemesh route '코드 리뷰'")
+    print("  suggest            — 기술 스택 기반 역할 추천  예: python3 -m rolemesh suggest --stack claude,openclaw")
     print("  integration add    — 외부 에이전트 등록  예: python3 -m rolemesh integration add --name mybot --role builder --endpoint http://localhost:8080")
     print("  integration list   — 등록된 통합 목록 출력")
     print("  integration remove — 통합 삭제  예: python3 -m rolemesh integration remove --name mybot")
@@ -67,6 +69,43 @@ def _cmd_route(task_text: str):
     for i, m in enumerate(matches, 1):
         print(f"  [{i}] {m.agent_id} / {m.capability}  (score={m.score})")
         print(f"      {m.routing_explanation}")
+
+
+def _cmd_suggest(args: list[str]) -> None:
+    """suggest --stack tool1,tool2,... 서브커맨드 처리."""
+    import argparse
+    from .role_mapper import RoleMapper
+
+    parser = argparse.ArgumentParser(prog="rolemesh suggest", add_help=False)
+    parser.add_argument("--stack", default=None, help="도구 목록 (쉼표 구분). 미지정 시 자동 탐지.")
+    parsed = parser.parse_args(args)
+
+    mapper = RoleMapper()
+    if parsed.stack:
+        stack = [t.strip() for t in parsed.stack.split(",") if t.strip()]
+    else:
+        stack = mapper.detect_stack()
+        print(f"자동 탐지된 스택: {', '.join(stack) if stack else '(없음)'}")
+        print()
+
+    if not stack:
+        print("스택을 감지하지 못했습니다. --stack 옵션으로 직접 지정하세요.")
+        print("예: python3 -m rolemesh suggest --stack claude,openclaw")
+        return
+
+    suggestions = mapper.suggest_roles(stack)
+
+    if not suggestions:
+        print(f"스택 [{', '.join(stack)}]에 대한 역할 추천을 찾지 못했습니다.")
+        return
+
+    print(f"스택: {', '.join(stack)}")
+    print()
+    print(f"{'역할':<20} {'에이전트':<25} {'신뢰도':<10} 이유")
+    print("-" * 80)
+    for s in suggestions:
+        pct = f"{s['confidence']*100:.0f}%"
+        print(f"{s['role']:<20} {s['agent']:<25} {pct:<10} {s['reason']}")
 
 
 def _cmd_integration(args: list[str]) -> None:
@@ -175,6 +214,8 @@ def main():
             print("사용법: python3 -m rolemesh route '<task>'")
             sys.exit(1)
         _cmd_route(args[1])
+    elif cmd == "suggest":
+        _cmd_suggest(args[1:])
     elif cmd == "integration":
         if len(args) < 2:
             print("사용법: python3 -m rolemesh integration <add|list|remove> [options]")

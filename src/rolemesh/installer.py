@@ -235,6 +235,56 @@ class RoleMeshInstaller:
         print("=" * 56)
         print()
 
+    # ── 라이트 모드 ───────────────────────────────────────────
+
+    def run_lite(self) -> None:
+        """라이트 모드: DB 초기화 + PM 역할만 등록. sqlite3만 필요. 워커 미실행."""
+        print()
+        print("=" * 56)
+        print("  RoleMesh Lite Mode")
+        print("  최소 구성: DB 초기화 + PM 역할 등록만 수행.")
+        print("=" * 56)
+        print()
+
+        # DB 초기화
+        print("[1/2] DB 초기화 중...")
+        self.init_database()
+        print(f"  → {self.db_path} 생성 완료")
+        print()
+
+        # PM 역할만 등록 (openclaw 또는 local-pm)
+        env = self.detect_environment()
+        roles = self.recommend_roles(env)
+        pm_roles = [r for r in roles if r.role == "PM"]
+        if not pm_roles:
+            pm_roles = [
+                RoleConfig(
+                    role="PM",
+                    agent_id="local-pm",
+                    display_name="PM (로컬)",
+                    description="로컬 프로젝트 관리자 (라이트 모드)",
+                    tool=None,
+                    capabilities=[
+                        {
+                            "name": "project_management",
+                            "description": "태스크 계획 및 관리",
+                            "keywords": ["계획", "관리", "plan"],
+                            "cost_level": "low",
+                        }
+                    ],
+                )
+            ]
+
+        print("[2/2] PM 역할 등록 중...")
+        self.register_roles(pm_roles)
+        for r in pm_roles:
+            print(f"  → {r.role}: {r.display_name} 등록 완료")
+        print()
+        print(f"  DB 위치: {self.db_path}")
+        print("  라이트 모드 완료. Builder/Analyst는 'python3 -m rolemesh init' 으로 추가 가능.")
+        print("=" * 56)
+        print()
+
     # ── 메인 실행 ─────────────────────────────────────────────
 
     def run(self) -> None:
@@ -263,9 +313,19 @@ class RoleMeshInstaller:
 
 
 def main():
-    db_path = os.environ.get("ROLEMESH_DB", DEFAULT_DB_PATH)
+    import argparse
+    parser = argparse.ArgumentParser(prog="rolemesh init", add_help=False)
+    parser.add_argument("--lite", action="store_true", help="라이트 모드: DB 초기화 + PM 역할만 등록 (워커 미실행)")
+    parser.add_argument("--db", default=None, help="DB 경로 재정의")
+    parsed, _ = parser.parse_known_args()
+
+    db_path = parsed.db or os.environ.get("ROLEMESH_DB", DEFAULT_DB_PATH)
     installer = RoleMeshInstaller(db_path=db_path)
-    installer.run()
+
+    if parsed.lite:
+        installer.run_lite()
+    else:
+        installer.run()
 
 
 if __name__ == "__main__":

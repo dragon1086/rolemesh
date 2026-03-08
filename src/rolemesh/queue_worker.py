@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
@@ -263,13 +264,51 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             print(f"[worker] DLQ(retry 소진): {task_id} — {error_msg}", file=sys.stderr)
 
 
+DEFAULT_DB_PATH = os.path.expanduser("~/ai-comms/registry.db")
+STALE_RECOVER_INTERVAL = 300  # recover_stale 주기(초): 5분마다 실행
+
+
+def recover_stale(stale_threshold_seconds: int = 1800, db_path: str = DEFAULT_DB_PATH) -> int:
+    """running 상태이고 updated_at이 stale_threshold_seconds 초 초과한 태스크를 pending으로 복귀.
+
+    반환값: 복구된 건수
+    """
+    cutoff = int(time.time()) - stale_threshold_seconds
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.execute(
+                "UPDATE tasks SET status='pending', updated_at=? "
+                "WHERE status='running' AND updated_at < ?",
+                (int(time.time()), cutoff),
+            )
+            conn.commit()
+            recovered = cur.rowcount
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[worker] recover_stale 오류: {e}", file=sys.stderr)
+        return 0
+
+    if recovered:
+        print(f"[worker] recover_stale: {recovered}건 pending 복귀 (임계={stale_threshold_seconds}s)", file=sys.stderr)
+    return recovered
+
+
 def run_loop() -> None:
     client = RegistryClient()
     orchestrator = SymphonyMACRS(registry=client)
     # 시작 로그는 stderr로 (사용자 채널 차단, 디버그용 유지)
     print(f"[worker] 시작 (PID={os.getpid()}, poll={POLL_INTERVAL}s)", file=sys.stderr)
 
+    last_stale_check = 0.0
     while True:
+        # stale 복구: STALE_RECOVER_INTERVAL마다 실행
+        now = time.time()
+        if now - last_stale_check >= STALE_RECOVER_INTERVAL:
+            recover_stale()
+            last_stale_check = now
+
         task = client.dequeue_next()
         if task:
             _run_task(task, orchestrator, client)

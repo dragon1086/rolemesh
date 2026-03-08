@@ -27,6 +27,9 @@ from typing import Optional
 
 # amp MCP 서버 주소
 AMP_MCP_URL = "http://127.0.0.1:3010"
+CB_STATE_FILE = "/tmp/amp-circuit-breaker.json"
+CB_OPEN_SEC = 600  # 10분
+AMP_TIMEOUT_LOG = "/tmp/amp-timeouts.jsonl"
 
 # 상록 기본 프로필 컨텍스트
 DEFAULT_PROFILE = (
@@ -41,6 +44,62 @@ _DEBATE_PATTERNS = [
     "장단점", "pros and cons", "찬반", "compare", "which is better",
     "차이", "대결", r"vs\.", "반박", "논쟁",
 ]
+
+
+
+
+def _cb_state() -> dict:
+    try:
+        with open(CB_STATE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {"opened_until": 0, "failures": 0, "last_error": ""}
+
+
+def _cb_save(st: dict) -> None:
+    try:
+        with open(CB_STATE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(st, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _cb_open(last_error: str) -> None:
+    st = _cb_state()
+    st["opened_until"] = int(time.time()) + CB_OPEN_SEC
+    st["failures"] = int(st.get("failures", 0)) + 1
+    st["last_error"] = (last_error or "")[:200]
+    _cb_save(st)
+
+
+def _cb_reset() -> None:
+    _cb_save({"opened_until": 0, "failures": 0, "last_error": ""})
+
+
+def _cb_is_open() -> tuple[bool, int, str]:
+    st = _cb_state()
+    now = int(time.time())
+    until = int(st.get("opened_until", 0) or 0)
+    if until > now:
+        return True, until - now, st.get("last_error", "")
+    return False, 0, ""
+
+def _log_timeout_event(event: str, tool: str, timeout_s: float, attempt: int, error: str = "", elapsed_ms: int = 0, circuit_open: bool = False) -> None:
+    try:
+        row = {
+            "ts": int(time.time()),
+            "event": event,
+            "tool": tool,
+            "timeout_s": timeout_s,
+            "attempt": attempt,
+            "elapsed_ms": elapsed_ms,
+            "error": (error or "")[:300],
+            "circuit_open": circuit_open,
+        }
+        with open(AMP_TIMEOUT_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 def _classify_tool(query: str, force_tool: Optional[str]) -> str:
@@ -114,15 +173,14 @@ def is_amp_available(timeout: int = 5) -> bool:
     except (httpx.ConnectError, httpx.TimeoutException):
         return False
     except Exception:
-        # 서버가 응답했지만 에러 (HTTP 400 등) → 서버 살아있음
-        return True
+        return False
 
 
 def ask_amp(
     query: str,
     profile_context: Optional[str] = None,
     force_tool: Optional[str] = None,
-    timeout: int = 45,
+    timeout: int = 90,
 ) -> dict:
     """amp에 질문 전송 (동기). 실패 시 1회 재시도 (5초 대기).
 
@@ -140,6 +198,15 @@ def ask_amp(
     """
     tool = _classify_tool(query, force_tool)
     context = profile_context or DEFAULT_PROFILE
+    tool_timeout = timeout
+    if force_tool is None:
+        # 기본값일 때만 도구별 상향 타임아웃 적용
+        if tool == "debate":
+            tool_timeout = max(timeout, 150)
+        elif tool == "analyze":
+            tool_timeout = max(timeout, 120)
+        elif tool == "quick_answer":
+            tool_timeout = max(timeout, 60)
     full_query = f"[분석 컨텍스트: {context}]\n\n{query}"
 
     payload = {
@@ -152,25 +219,42 @@ def ask_amp(
         },
     }
 
-    http_timeout = httpx.Timeout(float(timeout), connect=10.0)
+    open_now, remain, last_err = _cb_is_open()
+    if open_now:
+        _log_timeout_event("circuit_open_skip", tool, float(tool_timeout), attempt=0, error=last_err, circuit_open=True)
+        return {
+            "fallback": True,
+            "reason": "amp circuit-open",
+            "answer": f"⚠️ amp 일시 차단 중({remain}s 남음). 로컬 fallback으로 진행.",
+            "tool_used": tool,
+            "cser": None,
+            "cser_text": "",
+            "raw": {},
+        }
+
+    http_timeout = httpx.Timeout(float(tool_timeout), connect=15.0)
     last_exc: str = ""
 
-    for attempt in range(2):  # 최대 2회 (초기 + 1회 재시도)
+    for attempt in range(3):  # 최대 3회 (초기 + 2회 재시도)
         if attempt > 0:
             time.sleep(5)  # 재시도 전 5초 대기
 
         try:
+            started = time.time()
             with httpx.Client(timeout=http_timeout) as client:
                 resp = client.post(AMP_MCP_URL, json=payload)
                 resp.raise_for_status()
                 raw = resp.json()
             parsed = _parse_response(raw)
             parsed["tool_used"] = tool
+            _cb_reset()
+            _log_timeout_event("success", tool, float(tool_timeout), attempt=attempt+1, elapsed_ms=int((time.time()-started)*1000))
             return parsed
 
         except (httpx.ConnectError, httpx.TimeoutException) as e:
-            # 연결/타임아웃 오류 → 재시도
             last_exc = str(e)
+            _cb_open(last_exc)
+            _log_timeout_event("timeout", tool, float(tool_timeout), attempt=attempt+1, error=last_exc)
             continue
 
         except Exception as e:
@@ -186,10 +270,12 @@ def ask_amp(
             }
 
     # 모든 재시도 소진 → 폴백
+    _cb_open(last_exc)
+    _log_timeout_event("fallback_unavailable", tool, float(tool_timeout), attempt=3, error=last_exc, circuit_open=True)
     return {
         "fallback": True,
         "reason": "amp unavailable",
-        "answer": f"⚠️ amp 서버 접근 불가 (재시도 후 실패): {last_exc}",
+        "answer": "⚠️ amp 서버 불안정으로 로컬 fallback으로 진행.",
         "tool_used": tool,
         "cser": None,
         "cser_text": "",
@@ -201,7 +287,7 @@ async def ask_amp_async(
     query: str,
     profile_context: Optional[str] = None,
     force_tool: Optional[str] = None,
-    timeout: int = 45,
+    timeout: int = 90,
 ) -> dict:
     """amp에 질문 전송 (비동기). 실패 시 1회 재시도 (5초 대기).
 
@@ -209,6 +295,15 @@ async def ask_amp_async(
     """
     tool = _classify_tool(query, force_tool)
     context = profile_context or DEFAULT_PROFILE
+    tool_timeout = timeout
+    if force_tool is None:
+        # 기본값일 때만 도구별 상향 타임아웃 적용
+        if tool == "debate":
+            tool_timeout = max(timeout, 150)
+        elif tool == "analyze":
+            tool_timeout = max(timeout, 120)
+        elif tool == "quick_answer":
+            tool_timeout = max(timeout, 60)
     full_query = f"[분석 컨텍스트: {context}]\n\n{query}"
 
     payload = {
@@ -221,7 +316,20 @@ async def ask_amp_async(
         },
     }
 
-    http_timeout = httpx.Timeout(float(timeout), connect=10.0)
+    open_now, remain, last_err = _cb_is_open()
+    if open_now:
+        _log_timeout_event("circuit_open_skip", tool, float(tool_timeout), attempt=0, error=last_err, circuit_open=True)
+        return {
+            "fallback": True,
+            "reason": "amp circuit-open",
+            "answer": f"⚠️ amp 일시 차단 중({remain}s 남음). 로컬 fallback으로 진행.",
+            "tool_used": tool,
+            "cser": None,
+            "cser_text": "",
+            "raw": {},
+        }
+
+    http_timeout = httpx.Timeout(float(tool_timeout), connect=15.0)
     last_exc: str = ""
 
     for attempt in range(2):
@@ -229,16 +337,21 @@ async def ask_amp_async(
             await asyncio.sleep(5)
 
         try:
+            started = time.time()
             async with httpx.AsyncClient(timeout=http_timeout) as client:
                 resp = await client.post(AMP_MCP_URL, json=payload)
                 resp.raise_for_status()
                 raw = resp.json()
             parsed = _parse_response(raw)
             parsed["tool_used"] = tool
+            _cb_reset()
+            _log_timeout_event("success", tool, float(tool_timeout), attempt=attempt+1, elapsed_ms=int((time.time()-started)*1000))
             return parsed
 
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             last_exc = str(e)
+            _cb_open(last_exc)
+            _log_timeout_event("timeout", tool, float(tool_timeout), attempt=attempt+1, error=last_exc)
             continue
 
         except Exception as e:
@@ -252,10 +365,12 @@ async def ask_amp_async(
                 "raw": {},
             }
 
+    _cb_open(last_exc)
+    _log_timeout_event("fallback_unavailable", tool, float(tool_timeout), attempt=3, error=last_exc, circuit_open=True)
     return {
         "fallback": True,
         "reason": "amp unavailable",
-        "answer": f"⚠️ amp 서버 접근 불가 (재시도 후 실패): {last_exc}",
+        "answer": "⚠️ amp 서버 불안정으로 로컬 fallback으로 진행.",
         "tool_used": tool,
         "cser": None,
         "cser_text": "",
