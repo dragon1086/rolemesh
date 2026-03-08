@@ -17,7 +17,22 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     _create_tables(conn)
+    _migrate_tables(conn)
     return conn
+
+
+def _migrate_tables(conn: sqlite3.Connection) -> None:
+    """기존 DB에 누락 컬럼 추가 (무중단 마이그레이션)."""
+    migrations = [
+        ("task_queue", "retry_count", "INTEGER DEFAULT 0"),
+        ("task_queue", "run_after",   "REAL DEFAULT 0"),
+    ]
+    for table, column, col_def in migrations:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
+            conn.commit()
+        except Exception:
+            pass  # 이미 존재하면 무시
 
 
 def _create_tables(conn: sqlite3.Connection) -> None:
@@ -90,7 +105,26 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             created_at     REAL,
             started_at     REAL,
             done_at        REAL,
-            error          TEXT
+            error          TEXT,
+            retry_count    INTEGER DEFAULT 0,
+            run_after      REAL DEFAULT 0
+        )
+    """)
+
+    # dead_letter: retry 소진 태스크 보관소
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dead_letter (
+            id          TEXT PRIMARY KEY,
+            task_id     TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            kind        TEXT,
+            source      TEXT DEFAULT 'manual',
+            priority    INTEGER DEFAULT 5,
+            retry_count INTEGER DEFAULT 0,
+            error       TEXT,
+            created_at  REAL,
+            dlq_at      REAL
         )
     """)
 

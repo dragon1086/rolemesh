@@ -50,6 +50,44 @@ def _get_openai_api_key() -> Optional[str]:
     return None
 
 
+
+
+def _hydrate_retry_description(description: str) -> str:
+    """재시도 태스크에서 원본 payload를 잃지 않도록 msg-id 기준으로 설명 보강."""
+    desc = (description or "").strip()
+    m = re.search(r"(msg-\d{8}-\d{6})", desc)
+    if not m:
+        return desc
+    msg_id = m.group(1)
+
+    candidates = [
+        f"/Users/rocky/obsidian-vault/.claude-comms/openclaw-bot/inbox/{msg_id}.md",
+        f"/Users/rocky/obsidian-vault/.claude-comms/cokac-bot/inbox/{msg_id}.md",
+    ]
+
+    # session log fallback: msg-...-YYYYMMDDHHMM.log
+    log_dir = "/Users/rocky/obsidian-vault/.claude-comms/shared/session-logs"
+    try:
+        if os.path.isdir(log_dir):
+            for name in sorted(os.listdir(log_dir), reverse=True):
+                if name.startswith(msg_id + "-") and name.endswith('.log'):
+                    candidates.append(os.path.join(log_dir, name))
+                    break
+    except Exception:
+        pass
+
+    for c in candidates:
+        try:
+            if os.path.exists(c):
+                txt = Path(c).read_text(encoding='utf-8', errors='ignore')
+                txt = txt.strip()
+                if txt:
+                    snippet = txt[:1600]
+                    return desc + "\n\n[auto-hydrated payload source: " + c + "]\n" + snippet
+        except Exception:
+            continue
+    return desc
+
 def _normalize_task_title(title: str) -> str:
     t = (title or "").strip().lower()
     # [RB12], [R3] 같은 라운드 prefix 제거
@@ -712,7 +750,7 @@ class RegistryClient:
         """
         conn = self._conn_ctx()
         norm_title = _normalize_task_title(title)
-        desc = (description or "").strip()
+        desc = _hydrate_retry_description((description or "").strip())
 
         # 1) admission gate: 반복되는 추상 coding 요청 차단
         if source in ("rolemesh-build", "rolemesh-autoevo") and kind == "coding":
@@ -751,15 +789,20 @@ class RegistryClient:
         return task_id
 
     def dequeue_next(self) -> dict | None:
-        """pending 중 우선순위 최고 태스크를 running으로 원자적 변경 후 반환. 없으면 None."""
+        """pending 중 우선순위 최고 태스크를 running으로 원자적 변경 후 반환. 없으면 None.
+
+        run_after가 설정된 태스크는 해당 시각 이후에만 dequeue.
+        """
         conn = self._conn_ctx()
+        now = time.time()
         with conn:
             row = conn.execute("""
                 SELECT * FROM task_queue
                 WHERE status = 'pending'
+                  AND (run_after IS NULL OR run_after <= ?)
                 ORDER BY priority DESC, created_at ASC
                 LIMIT 1
-            """).fetchone()
+            """, (now,)).fetchone()
             if row is None:
                 return None
             conn.execute("""
@@ -768,6 +811,57 @@ class RegistryClient:
                 WHERE id = ? AND status = 'pending'
             """, (time.time(), row["id"]))
         return dict(row)
+
+    def retry_task(self, task_id: str, retry_count: int, delay_sec: int) -> None:
+        """태스크를 exponential backoff 후 재시도 대기열로 복귀."""
+        run_after = time.time() + delay_sec
+        conn = self._conn_ctx()
+        conn.execute("""
+            UPDATE task_queue
+            SET status = 'pending', retry_count = ?, run_after = ?,
+                error = NULL, started_at = NULL
+            WHERE id = ?
+        """, (retry_count, run_after, task_id))
+        conn.commit()
+        print(f"[queue] retry #{retry_count} in {delay_sec}s: {task_id}")
+
+    def move_to_dlq(self, task_id: str, reason: str = "") -> None:
+        """retry 소진 태스크를 dead_letter 테이블로 이동."""
+        conn = self._conn_ctx()
+        row = conn.execute(
+            "SELECT * FROM task_queue WHERE id = ?", (task_id,)
+        ).fetchone()
+        if row is None:
+            return
+        r = dict(row)
+        dlq_id = str(uuid.uuid4())
+        conn.execute("""
+            INSERT OR REPLACE INTO dead_letter
+                (id, task_id, title, description, kind, source, priority,
+                 retry_count, error, created_at, dlq_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            dlq_id, task_id, r["title"], r.get("description", ""),
+            r.get("kind"), r.get("source", "manual"), r.get("priority", 5),
+            r.get("retry_count", 0), reason[:300], r.get("created_at"), time.time(),
+        ))
+        conn.execute(
+            "UPDATE task_queue SET status = 'dead_letter', error = ?, done_at = ? WHERE id = ?",
+            (reason[:300], time.time(), task_id),
+        )
+        conn.commit()
+        print(f"[queue] DLQ: {task_id}")
+
+    def queue_counts(self) -> dict:
+        """태스크 상태별 카운트 + DLQ 카운트 반환."""
+        conn = self._conn_ctx()
+        rows = conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM task_queue GROUP BY status"
+        ).fetchall()
+        counts = {r["status"]: r["cnt"] for r in rows}
+        dlq_row = conn.execute("SELECT COUNT(*) as cnt FROM dead_letter").fetchone()
+        counts["dlq"] = dlq_row["cnt"] if dlq_row else 0
+        return counts
 
     def complete_task(self, task_id: str, summary: str = "", error: str = None, status: str = None) -> None:
         """태스크 완료(done), 실패(failed), 또는 커스텀 상태 처리."""

@@ -11,6 +11,7 @@ queue_worker.py — MACRS 태스크 큐 워커
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import subprocess
@@ -45,6 +46,54 @@ def _should_notify_done(task: dict) -> bool:
 
 
 
+
+
+
+
+def _extract_done_report_v1(summary: str) -> dict | None:
+    t=(summary or '')
+    marker='DONE_REPORT_V1:'
+    if marker not in t:
+        return None
+    raw=t.split(marker,1)[1].strip().splitlines()[0].strip()
+    try:
+        obj=json.loads(raw)
+        if isinstance(obj, dict):
+            return obj
+    except Exception:
+        return None
+    return None
+
+
+def _is_verified_report(report: dict | None) -> bool:
+    if not report:
+        return False
+    if report.get('status') not in ('implemented','verified'):
+        return False
+    if not report.get('changed_files') or not report.get('diff_summary') or not report.get('tests') or not report.get('artifacts'):
+        return False
+    for t in report.get('tests',[]):
+        try:
+            if int(t.get('exit_code',1))!=0:
+                return False
+        except Exception:
+            return False
+    return True
+
+def _is_delegated_only_result(summary: str) -> bool:
+    t = (summary or "").strip().lower()
+    if not t:
+        return False
+    delegated_markers = [
+        "구현 위임 완료", "위임 완료", "delegated", "assigned to",
+        "cokac-bot에 구현 위임 완료",
+        "조정 작업: 하위 결과를 수집/검증 후 사용자에 보고",
+    ]
+    return any(m.lower() in t for m in delegated_markers)
+
+
+def _verification_failed_msg(summary: str) -> str:
+    return "verification_failed: delegated-only result (no proof). raw=" + (summary or "")[:180]
 def _allow_done_event() -> bool:
     now = int(time.time())
     try:
@@ -94,6 +143,28 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             summaries = [r["summary"] for r in out.get("results", [])]
             summary = " | ".join(summaries)
 
+        report = _extract_done_report_v1(summary)
+
+        if _is_delegated_only_result(summary):
+            vmsg = _verification_failed_msg(summary)
+            client.complete_task(task_id, error=vmsg, status="verification_failed")
+            try:
+                _send_openclaw_event(f"Hold: [{task['title']}] delegated-only result blocked")
+            except Exception:
+                pass
+            print(f"[worker] 보류(검증실패): {task_id}", file=sys.stderr)
+            return
+
+        if report and not _is_verified_report(report):
+            vmsg = "verification_failed: invalid DONE_REPORT_V1 payload"
+            client.complete_task(task_id, error=vmsg, status="verification_failed")
+            try:
+                _send_openclaw_event(f"Hold: [{task['title']}] invalid DONE_REPORT_V1")
+            except Exception:
+                pass
+            print(f"[worker] 보류(리포트검증실패): {task_id}", file=sys.stderr)
+            return
+
         # 본체 성공 — announce 시도
         announce_error = None
         if _should_notify_done(task) and _allow_done_event():
@@ -115,13 +186,26 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
             print(f"[worker] 완료: {task_id}")
     except Exception as e:
         error_msg = str(e)[:300]
-        client.complete_task(task_id, error=error_msg)
-        # 실패는 source와 무관하게 알림 유지
-        try:
-            _send_openclaw_event(f"Failed: [{task['title']}] {error_msg}")
-        except Exception:
-            pass  # 실패 알림도 전송 불가 시 무시
-        print(f"[worker] 실패: {task_id} — {error_msg}", file=sys.stderr)
+        retry_count = int(task.get("retry_count") or 0)
+        max_retries = 3
+
+        if retry_count < max_retries:
+            delay = 30 * (2 ** retry_count)  # 30s → 60s → 120s
+            client.retry_task(task_id, retry_count + 1, delay)
+            print(
+                f"[worker] 재시도 예약: {task_id} "
+                f"(시도 {retry_count + 1}/{max_retries}, {delay}s 후) — {error_msg}",
+                file=sys.stderr,
+            )
+        else:
+            client.move_to_dlq(task_id, error_msg)
+            try:
+                _send_openclaw_event(
+                    f"DLQ: [{task['title']}] retry 소진 — {error_msg[:150]}"
+                )
+            except Exception:
+                pass
+            print(f"[worker] DLQ(retry 소진): {task_id} — {error_msg}", file=sys.stderr)
 
 
 def run_loop() -> None:
