@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any, Optional
 
 from .circuit_breaker import CBState, ProviderCircuitBreaker
@@ -26,7 +25,22 @@ class ProviderRouter:
         failure_threshold: int = 3,
         cooldown_sec: int = 60,
     ) -> None:
-        self.providers: list[str] = providers if providers is not None else list(DEFAULT_PROVIDERS)
+        if failure_threshold < 1:
+            raise ValueError("failure_threshold must be >= 1")
+        if cooldown_sec < 0:
+            raise ValueError("cooldown_sec must be >= 0")
+
+        raw_providers = list(DEFAULT_PROVIDERS) if providers is None else list(providers)
+        normalized: list[str] = []
+        for provider in raw_providers:
+            if not isinstance(provider, str) or not provider.strip():
+                raise ValueError("providers must contain non-empty strings")
+            provider_name = provider.strip()
+            if provider_name == FALLBACK_PROVIDER:
+                raise ValueError(f"{FALLBACK_PROVIDER!r} is reserved for fallback routing")
+            normalized.append(provider_name)
+
+        self.providers = normalized
         self.cb = ProviderCircuitBreaker(
             failure_threshold=failure_threshold,
             cooldown_sec=cooldown_sec,

@@ -36,20 +36,19 @@ python3 -m rolemesh integration list
 
 ## Step 3 — 첫 번째 요청 처리
 
-데모 태스크를 큐에 추가하고 상태를 확인합니다:
+첫 요청을 라우팅하고 상태를 확인합니다:
 
 ```bash
-bash run_demo.sh
-```
+bash examples/quickstart/run_demo.sh
 
-또는 수동으로:
-
-```bash
-# 태스크 라우팅 확인
+# 또는 수동 실행
 python3 -m rolemesh route "빌드 실행"
 
 # 큐 상태 확인
 python3 -m rolemesh status
+
+# 워커 상태 확인
+bash scripts/status.sh
 ```
 
 ---

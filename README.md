@@ -2,6 +2,8 @@
 
 Role-first local AI orchestration for non-developers.
 
+Current release: `v0.2.1`
+
 ## Quick Start
 
 Get from zero to your first routed request in 3 steps:
@@ -56,7 +58,7 @@ That's it. RoleMesh finds the right agent for your task automatically.
                         └─────────────────────────────┘
 ```
 
-**Roles:**
+**Roles**
 - **PM** (`RegistryClient`) — routes tasks to the best registered agent by capability score
 - **PM Runtime** (`SmartRouter`) — provider selection, fallback, circuit-breaker aware delegation
 - **Builder** (`queue_worker`) — executes tasks from the SQLite queue via Claude/Codex-capable delegates
@@ -64,6 +66,12 @@ That's it. RoleMesh finds the right agent for your task automatically.
 - **AutoEvo** (`autoevo_worker`) — self-evolving rules and skill cleanup
 
 ## Status
+
+`v0.2.1` includes:
+- contract-first routing and PM quality tracking
+- provider-aware delegation via `smart-delegate.sh` and `codex-delegate.sh`
+- integration CLI for external agent registration and delegate generation
+- launchd/status scripts for local worker operations
 
 Check live worker health:
 
@@ -92,18 +100,17 @@ Task Queue:
 python3 -m pytest tests/ -q
 ```
 
-## Phase Roadmap
+## Delegation Scripts
 
-- [x] **Phase 1** — Core stability: launchd retry, DLQ, health CLI
-- [x] **Phase 2** — IntentGate regression & E2E smoke tests
-- [ ] **Phase 3** — Contract-first PM routing (contract_id, acceptance criteria, JSONL scoring)
-- [ ] **Phase 4** — Dashboard & weekly quality reports
+- `scripts/smart-delegate.sh`: 권장 기본 진입점. provider 선택, circuit breaker, throttle, fallback을 처리합니다.
+- `scripts/codex-delegate.sh`: OpenAI Codex 직접 위임 경로입니다.
+- `scripts/cokac-delegate.sh`: Anthropic/Claude 중심 기본 빌더 경로입니다.
 
 ## Structure
 
 ```
 src/rolemesh/      # core Python package
-scripts/           # shell worker launchers and status tools
+scripts/           # worker launchers, delegate wrappers, status tools
 tests/             # pytest test suite
 docs/              # PRD, architecture, engineering rules
 ```

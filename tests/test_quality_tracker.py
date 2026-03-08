@@ -138,6 +138,26 @@ def test_shared_connection_reused_across_registry_and_quality_tracker(tmp_path):
         mgr.close()
 
 
+def test_integration_manager_close_is_idempotent(tmp_path):
+    db_path = str(tmp_path / "integration.db")
+    mgr = IntegrationManager(db_path=db_path)
+
+    mgr.add(
+        "bot-a",
+        role="builder",
+        endpoint="http://localhost:9999",
+        capabilities=["build"],
+    )
+    mgr.close()
+    mgr.close()
+
+    reopened = IntegrationManager(db_path=db_path)
+    try:
+        assert reopened.get("bot-a")["capabilities"] == ["build"]
+    finally:
+        reopened.close()
+
+
 def test_shared_connection_isolated_per_thread(tmp_path):
     db_path = str(tmp_path / "threaded.db")
     main_conn = get_shared_connection(db_path)

@@ -8,7 +8,8 @@ Anthropic rate limit 상황에서는 `scripts/codex-delegate.sh` fallback을 권
 
 빌더 옵션:
 - `cokac` (Claude Code): 기본 빌더 (Anthropic)
-- `codex`: 대체 빌더 (OpenAI) — Anthropic rate limit 시 자동 fallback 권장
+- `codex` (OpenAI Codex): 대체 빌더
+- `gemini`: 2차 fallback 빌더
 
 ---
 
@@ -23,11 +24,11 @@ Anthropic rate limit 상황에서는 `scripts/codex-delegate.sh` fallback을 권
         └─▶ 선택된 delegate.sh 실행
 
 록이(PM)
-  └─▶ scripts/cokac-delegate.sh   ← PM이 호출하는 진입점
-        └─▶ scripts/claude-delegate.sh  ← CB/Throttle 체크
-              ├─ Circuit Breaker OPEN? → exit 1 (위임 차단)
-              ├─ Throttle wait > 0?   → sleep 후 진행
-              └─▶ claude [args]       ← 실제 실행
+  └─▶ scripts/cokac-delegate.sh   ← PM이 호출하는 기본 진입점
+        └─▶ scripts/claude-delegate.sh
+              ├─ Circuit Breaker 체크
+              ├─ Throttle 체크
+              └─▶ claude [args]
 
 록이(PM)
   └─▶ scripts/codex-delegate.sh   ← OpenAI Codex 대체 진입점
@@ -54,11 +55,11 @@ scripts/cokac-delegate.sh --model claude-opus-4-5 -p "복잡한 리팩토링"
 # 자동 승인 (CI/배치 환경)
 scripts/cokac-delegate.sh --dangerously-skip-permissions -p "자동화 작업"
 
-# claude-delegate.sh 직접 사용 (non-cokac 컨텍스트)
+# claude-delegate.sh 직접 사용
 scripts/claude-delegate.sh -p "질문"
 scripts/claude-delegate.sh --version
 
-# codex 빌더 위임 (OpenAI fallback)
+# codex 빌더 위임
 scripts/codex-delegate.sh -C /path/to/project "버그 수정해줘"
 ```
 
@@ -69,13 +70,13 @@ scripts/codex-delegate.sh -C /path/to/project "버그 수정해줘"
 설정 파일: `~/rolemesh/config/throttle.yaml`
 
 ```yaml
-anthropic: 15   # 분당 15회 (Anthropic rate limit 여유 확보)
+anthropic: 15
 openai: 20
-openai-codex: 30  # Codex Pro 기준 넉넉한 기본값
+openai-codex: 30
 gemini: 60
 ```
 
-- 이 파일을 수정하면 **즉시 반영** (재시작 불필요)
+- 이 파일을 수정하면 즉시 반영됨
 - 기본값보다 높게 올리면 rate limit에 걸릴 수 있음
 
 ---
@@ -85,7 +86,7 @@ gemini: 60
 ```bash
 # 현재 CB 상태 확인
 python3 -c "
-from src.rolemesh.circuit_breaker import ProviderCircuitBreaker
+from rolemesh.adapters.circuit_breaker import ProviderCircuitBreaker
 cb = ProviderCircuitBreaker()
 print('anthropic:', cb.get_state('anthropic'))
 print('남은 시간:', cb.cooldown_remaining('anthropic'), 's')
@@ -93,7 +94,7 @@ print('남은 시간:', cb.cooldown_remaining('anthropic'), 's')
 
 # CB 강제 초기화 (장애 복구용)
 python3 -c "
-from src.rolemesh.circuit_breaker import ProviderCircuitBreaker
+from rolemesh.adapters.circuit_breaker import ProviderCircuitBreaker
 ProviderCircuitBreaker().reset('anthropic')
 print('CB reset 완료')
 "
@@ -106,16 +107,16 @@ cat /tmp/rolemesh-cb-anthropic.json
 
 ## 왜 이 프로토콜이 필요한가?
 
-연속 배치 실행 시 Anthropic API rate limit 초과가 발생했다 (8배치 연속 실행 → rate limit).
+연속 배치 실행 시 Anthropic API rate limit 초과가 발생했다.
 
-기존 Throttle/Circuit Breaker는 **큐 워커 내부**에만 적용되어 있었고,
-PM이 직접 `claude -p`로 위임하는 경로에는 보호장치가 없었다.
+기존 Throttle/Circuit Breaker는 큐 워커 내부에만 적용되어 있었고,
+PM이 직접 위임하는 경로에는 보호장치가 부족했다.
 
 이 프로토콜로:
-- **Throttle**: 분당 요청 수를 15회로 제한해 rate limit 여유 확보
-- **Circuit Breaker**: 연속 실패 시 자동 차단 → 불필요한 API 호출 방지
-- **Smart fallback router**: Anthropic 차단/소진 시 Codex, 이후 Gemini로 자동 전환
-- **위임 로그**: 타임스탬프 포함 위임 이력 stderr 기록
+- Throttle: provider별 요청 수 제한
+- Circuit Breaker: 연속 실패 시 자동 차단
+- Smart fallback router: Anthropic 차단/소진 시 Codex, 이후 Gemini로 자동 전환
+- 위임 로그: 타임스탬프 포함 이력 stderr 기록
 
 ---
 
@@ -126,5 +127,11 @@ PM이 직접 `claude -p`로 위임하는 경로에는 보호장치가 없었다.
 | CB OPEN | exit 1, 남은 시간 출력 |
 | Throttle wait 필요 | sleep 후 자동 실행 |
 | smart-delegate 1차 실패 | 다음 provider로 자동 fallback (최대 2회) |
-| CB/Throttle 체크 실패 (Python 오류) | 경고 출력 후 claude 그대로 실행 |
-| claude 실행 실패 | claude 종료 코드 그대로 전파 |
+| CB/Throttle 체크 실패 (Python 오류) | 경고 출력 후 delegate 그대로 실행 |
+| delegate 실행 실패 | 종료 코드 그대로 전파 |
+
+## 관련 스크립트
+
+- `scripts/smart-delegate.sh`: 권장 기본 진입점
+- `scripts/codex-delegate.sh`: OpenAI Codex 직접 위임
+- `scripts/cokac-delegate.sh`: Anthropic/Claude 중심 기본 경로

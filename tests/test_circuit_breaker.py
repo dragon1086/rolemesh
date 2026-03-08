@@ -193,6 +193,28 @@ def test_get_status_returns_all_providers(router):
         assert status[p]["available"] is True
 
 
+def test_provider_router_copies_provider_list():
+    providers = ["anthropic", "openai"]
+    router = ProviderRouter(providers=providers)
+
+    providers.append("gemini")
+
+    assert router.providers == ["anthropic", "openai"]
+
+
+@pytest.mark.parametrize("providers", [[""], ["anthropic", "  "], [FALLBACK_PROVIDER]])
+def test_provider_router_rejects_invalid_provider_names(providers):
+    with pytest.raises(ValueError):
+        ProviderRouter(providers=providers)
+
+
+def test_provider_router_rejects_invalid_thresholds():
+    with pytest.raises(ValueError, match="failure_threshold"):
+        ProviderRouter(failure_threshold=0)
+    with pytest.raises(ValueError, match="cooldown_sec"):
+        ProviderRouter(cooldown_sec=-1)
+
+
 # ---------------------------------------------------------------------------
 # 12. is_available True for CLOSED, False for OPEN
 # ---------------------------------------------------------------------------
