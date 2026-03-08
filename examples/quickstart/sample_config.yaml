@@ -1,0 +1,37 @@
+# RoleMesh 최소 설정 예시
+# 이 파일을 참고하여 에이전트를 등록하세요.
+
+rolemesh:
+  # DB 경로 (기본값: ~/rolemesh/rolemesh.db)
+  db_path: ~/rolemesh/rolemesh.db
+
+integrations:
+  - name: builder-bot
+    role: builder
+    endpoint: http://localhost:8080
+    capabilities:
+      - build
+      - compile
+      - package
+
+  - name: analyzer-bot
+    role: analyzer
+    endpoint: http://localhost:8081
+    capabilities:
+      - analyze
+      - review
+      - lint
+
+  - name: deploy-bot
+    role: deployer
+    endpoint: http://localhost:8082
+    capabilities:
+      - deploy
+      - release
+      - rollback
+
+# 태스크 큐 설정
+queue:
+  max_retry: 3
+  retry_delay_sec: 30
+  priority_default: 5
