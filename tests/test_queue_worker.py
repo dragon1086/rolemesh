@@ -7,6 +7,14 @@ from unittest.mock import MagicMock, patch
 from queue_worker import _run_task
 
 
+@pytest.fixture(autouse=True)
+def isolate_cb_throttle_state(tmp_path, monkeypatch):
+    """Redirect CB and throttle state files to tmp_path to prevent cross-test pollution."""
+    monkeypatch.setattr("rolemesh.circuit_breaker._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
+    yield
+
+
 def make_task(retry_count=0, source="manual", priority=5, kind="auto"):
     return {
         "id": "test-task-id",

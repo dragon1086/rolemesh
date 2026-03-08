@@ -1,0 +1,5 @@
+{"id": "test-1", "score": 82, "timestamp": "2026-03-08T08:00:00", "task_type": "planning", "agent": "pm"}
+{"id": "test-2", "score": 88, "timestamp": "2026-03-08T09:00:00", "task_type": "delegation", "agent": "pm"}
+{"id": "test-3", "score": 91, "timestamp": "2026-03-08T10:00:00", "task_type": "planning", "agent": "pm"}
+{"id": "test-4", "score": 85, "timestamp": "2026-03-08T11:00:00", "task_type": "review", "agent": "pm"}
+{"id": "test-5", "score": 94, "timestamp": "2026-03-08T12:00:00", "task_type": "planning", "agent": "pm"}

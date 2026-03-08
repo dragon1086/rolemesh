@@ -16,6 +16,14 @@ import time
 
 from .registry_client import RegistryClient
 
+# RoleMesh Throttle guard (graceful degradation if unavailable)
+try:
+    from .throttle import TokenBucketThrottle as _Throttle
+    _autoevo_throttle = _Throttle()
+    _AUTOEVO_THROTTLE = True
+except Exception:
+    _AUTOEVO_THROTTLE = False
+
 PID_FILE = "/tmp/rolemesh-autoevo-worker.pid"
 TOPIC = "요즘 오픈클로나 별에 별 AI가 나와서 뭘써야할지 모르겠어서 많이 받아놨어. 진짜 쓸모있게 쓰는 법 어디 없나?"
 SOURCE = "rolemesh-autoevo"
@@ -220,6 +228,16 @@ def enqueue_round(client: RegistryClient, conn: sqlite3.Connection, round_no: in
         if skip:
             print(f"[rolemesh-autoevo] skip enqueue: {title} ({reason})")
             continue
+        # Throttle check before enqueue
+        if _AUTOEVO_THROTTLE:
+            _wait = _autoevo_throttle.acquire("anthropic")
+            if _wait is not True:
+                print(f"[rolemesh-autoevo] throttle wait {_wait:.1f}s before enqueue: {title}")
+                time.sleep(float(_wait))
+                _wait2 = _autoevo_throttle.acquire("anthropic")
+                if _wait2 is not True:
+                    print(f"[rolemesh-autoevo] throttle retry failed, skip enqueue: {title}")
+                    continue
         task_id = client.enqueue(
             title=f"[R{round_no}] {title}",
             description=(

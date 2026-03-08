@@ -30,6 +30,16 @@ try:
 except Exception:
     from contracts import build_contract  # script/local import fallback
 
+# RoleMesh CB/Throttle guard (graceful degradation if unavailable)
+try:
+    from .circuit_breaker import ProviderCircuitBreaker as _ProviderCB
+    from .throttle import TokenBucketThrottle as _Throttle
+    _sf_cb = _ProviderCB()
+    _sf_throttle = _Throttle()
+    _SF_GUARD = True
+except Exception:
+    _SF_GUARD = False
+
 PM_QUALITY_LOG = os.path.expanduser("~/ai-comms/pm_packet_quality.jsonl")
 CONTRACT_ARTIFACT_DIR = os.path.expanduser("~/ai-comms/contracts")
 PARALLEL_CAP = 3
@@ -371,6 +381,32 @@ class SymphonyMACRS:
         assignee = self.route(item)
 
         if assignee == "amp":
+            # RoleMesh CB/Throttle guard
+            if _SF_GUARD:
+                if not _sf_cb.is_available("amp"):
+                    dur = int((time.time() - start) * 1000)
+                    return WorkResult(
+                        work_id=item.id,
+                        assignee=assignee,
+                        status="fallback",
+                        summary="CB OPEN: local_rule fallback 적용",
+                        proof={"reason": "circuit_breaker_open", "fallback": "local_rule"},
+                        duration_ms=dur,
+                    )
+                _throttle_result = _sf_throttle.acquire("amp")
+                if _throttle_result is not True:
+                    time.sleep(float(_throttle_result))
+                    _throttle_retry = _sf_throttle.acquire("amp")
+                    if _throttle_retry is not True:
+                        dur = int((time.time() - start) * 1000)
+                        return WorkResult(
+                            work_id=item.id,
+                            assignee=assignee,
+                            status="fallback",
+                            summary="throttle 초과: local_rule fallback 적용",
+                            proof={"reason": "throttle_exceeded", "wait_sec": _throttle_result, "fallback": "local_rule"},
+                            duration_ms=dur,
+                        )
             try:
                 # practical mode: 속도 우선(90s), 실패 시 quick_answer fallback
                 out = ask_amp(item.description, force_tool="analyze", timeout=150)
