@@ -30,6 +30,7 @@ from .init_db import init_db
 
 DEFAULT_DB_PATH = os.path.expanduser("~/ai-comms/registry.db")
 ROUTING_LOG_PATH = os.path.expanduser("~/ai-comms/routing_log.jsonl")
+DEFAULT_DLQ_MAX_ITEMS = 500
 
 
 def _get_openai_api_key() -> Optional[str]:
@@ -137,6 +138,7 @@ class RegistryClient:
         self.db_path = db_path
         self._conn = init_db(db_path)
         self._openai_api_key = _get_openai_api_key()
+        self._dlq_max_items = DEFAULT_DLQ_MAX_ITEMS
 
     def _conn_ctx(self) -> sqlite3.Connection:
         """연결이 살아있는지 확인 후 반환"""
@@ -817,12 +819,22 @@ class RegistryClient:
         """태스크를 exponential backoff 후 재시도 대기열로 복귀."""
         run_after = time.time() + delay_sec
         conn = self._conn_ctx()
+        dlq_row = conn.execute(
+            "SELECT * FROM dead_letter WHERE task_id = ? ORDER BY dlq_at DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        description = None
+        if dlq_row is not None:
+            description = dlq_row["description"]
         conn.execute("""
             UPDATE task_queue
             SET status = 'pending', retry_count = ?, run_after = ?,
-                error = NULL, started_at = NULL
+                error = NULL, started_at = NULL, done_at = NULL,
+                description = COALESCE(?, description)
             WHERE id = ?
-        """, (retry_count, run_after, task_id))
+        """, (retry_count, run_after, description, task_id))
+        if dlq_row is not None:
+            conn.execute("DELETE FROM dead_letter WHERE task_id = ?", (task_id,))
         conn.commit()
         print(f"[queue] retry #{retry_count} in {delay_sec}s: {task_id}")
 
@@ -850,6 +862,18 @@ class RegistryClient:
             "UPDATE task_queue SET status = 'dead_letter', error = ?, done_at = ? WHERE id = ?",
             (reason[:300], time.time(), task_id),
         )
+        if self._dlq_max_items > 0:
+            conn.execute(
+                """
+                DELETE FROM dead_letter
+                WHERE id IN (
+                    SELECT id FROM dead_letter
+                    ORDER BY dlq_at DESC
+                    LIMIT -1 OFFSET ?
+                )
+                """,
+                (self._dlq_max_items,),
+            )
         conn.commit()
         print(f"[queue] DLQ: {task_id}")
 

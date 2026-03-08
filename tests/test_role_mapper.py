@@ -99,10 +99,12 @@ class TestDetectStack:
 
 
 class TestSuggestRoles:
-    def test_empty_stack_returns_empty(self):
+    def test_empty_stack_returns_fallback_builder(self):
         mapper = RoleMapper()
         result = mapper.suggest_roles([])
-        assert result == []
+        assert len(result) == 1
+        assert result[0]["role"] == "builder"
+        assert result[0]["agent"] == "codex-builder"
 
     def test_claude_suggests_builder(self):
         mapper = RoleMapper()
@@ -162,7 +164,15 @@ class TestSuggestRoles:
     def test_unknown_tool_ignored(self):
         mapper = RoleMapper()
         result = mapper.suggest_roles(["unknowntool123", "nonexistent"])
-        assert result == []
+        assert len(result) == 1
+        assert result[0]["agent"] == "codex-builder"
+
+    def test_normalizes_case_duplicates_and_paths(self):
+        mapper = RoleMapper()
+        result = mapper.suggest_roles([" /usr/local/bin/CLAUDE ", "claude", "NodeJS"])
+        roles = {s["role"] for s in result}
+        assert "builder" in roles
+        assert "frontend-builder" in roles
 
 
 # ── resolve_conflicts 테스트 ─────────────────────────────────────────────

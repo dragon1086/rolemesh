@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.rolemesh.worker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/rocky/rolemesh/scripts/start_all_workers.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/rocky/rolemesh</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/rocky</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/rocky/rolemesh/src</string>
+        <key>ROLEMESH_PROJECT_ROOT</key>
+        <string>/Users/rocky/rolemesh</string>
+        <key>ROLEMESH_DB_PATH</key>
+        <string>/Users/rocky/ai-comms/registry.db</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/rolemesh-worker.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/rolemesh-worker.err</string>
+</dict>
+</plist>

@@ -11,6 +11,7 @@ role_mapper.py — 시스템 도구 탐지 기반 역할 자동 매핑.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from typing import TypedDict
 
@@ -29,6 +30,15 @@ _ROLE_PRIORITY: dict[str, int] = {
     "analyst": 2,
     "frontend-builder": 3,
 }
+
+_FALLBACK_SUGGESTIONS: list[RoleSuggestion] = [
+    RoleSuggestion(
+        role="builder",
+        agent="codex-builder",
+        confidence=0.30,
+        reason="명시적 도구 매칭 없음 — 범용 Codex Builder를 기본 후보로 제안",
+    ),
+]
 
 # 도구 → 역할 매핑 테이블
 _TOOL_ROLE_MAP: list[dict] = [
@@ -80,6 +90,35 @@ _TOOL_ROLE_MAP: list[dict] = [
 class RoleMapper:
     """시스템 도구 탐지 → 역할 자동 매핑."""
 
+    def _normalize_stack(self, stack: list[str] | None) -> list[str]:
+        """입력 스택을 소문자/별칭 기준으로 정규화하고 중복 제거."""
+        if not stack:
+            return []
+
+        aliases = {
+            "python": "python3",
+            "python.exe": "python3",
+            "nodejs": "node",
+        }
+        normalized: list[str] = []
+        seen: set[str] = set()
+
+        for raw in stack:
+            if raw is None:
+                continue
+            tool = str(raw).strip().lower()
+            if not tool:
+                continue
+            tool = os.path.basename(tool)
+            tool = re.split(r"\s+", tool, maxsplit=1)[0]
+            tool = aliases.get(tool, tool)
+            if tool in seen:
+                continue
+            seen.add(tool)
+            normalized.append(tool)
+
+        return normalized
+
     # ── 탐지 ──────────────────────────────────────────────────────
 
     def detect_stack(self) -> list[str]:
@@ -113,7 +152,7 @@ class RoleMapper:
 
     # ── 추천 ──────────────────────────────────────────────────────
 
-    def suggest_roles(self, stack: list[str]) -> list[RoleSuggestion]:
+    def suggest_roles(self, stack: list[str] | None) -> list[RoleSuggestion]:
         """스택 기반 역할 추천 목록 반환.
 
         Args:
@@ -122,7 +161,11 @@ class RoleMapper:
         Returns:
             [{role, agent, confidence, reason}] 목록 (confidence 내림차순).
         """
-        stack_set = set(stack)
+        normalized_stack = self._normalize_stack(stack)
+        if not normalized_stack:
+            return list(_FALLBACK_SUGGESTIONS)
+
+        stack_set = set(normalized_stack)
         candidates: list[RoleSuggestion] = []
 
         for entry in _TOOL_ROLE_MAP:
@@ -136,7 +179,14 @@ class RoleMapper:
                     )
                 )
 
-        return self.resolve_conflicts(candidates)
+        resolved = self.resolve_conflicts(candidates)
+        if resolved:
+            return resolved
+        return list(_FALLBACK_SUGGESTIONS)
+
+    def suggest(self, stack: list[str] | None = None) -> list[RoleSuggestion]:
+        """하위 호환용 별칭."""
+        return self.suggest_roles(stack)
 
     # ── 충돌 해소 ─────────────────────────────────────────────────
 

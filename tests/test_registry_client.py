@@ -114,6 +114,49 @@ def test_retry_task_run_after_not_dequeued_immediately(client):
     assert result is None or result["id"] != task_id
 
 
+def test_retry_task_restores_task_from_dlq(client):
+    task_id = client.enqueue("dlq-retry-task", "desc before dlq")
+    client.move_to_dlq(task_id, reason="failed too many times")
+
+    client.retry_task(task_id, retry_count=4, delay_sec=30)
+
+    conn = client._conn_ctx()
+    task_row = conn.execute(
+        "SELECT status, retry_count, done_at FROM task_queue WHERE id = ?",
+        (task_id,),
+    ).fetchone()
+    dlq_row = conn.execute(
+        "SELECT 1 FROM dead_letter WHERE task_id = ?",
+        (task_id,),
+    ).fetchone()
+
+    assert task_row["status"] == "pending"
+    assert task_row["retry_count"] == 4
+    assert task_row["done_at"] is None
+    assert dlq_row is None
+
+
+def test_move_to_dlq_prunes_old_entries_when_limit_exceeded(client):
+    client._dlq_max_items = 2
+    first = client.enqueue("dlq-1", "desc-1")
+    second = client.enqueue("dlq-2", "desc-2")
+    third = client.enqueue("dlq-3", "desc-3")
+
+    client.move_to_dlq(first, reason="e1")
+    client.move_to_dlq(second, reason="e2")
+    client.move_to_dlq(third, reason="e3")
+
+    rows = client._conn_ctx().execute(
+        "SELECT task_id FROM dead_letter ORDER BY dlq_at ASC"
+    ).fetchall()
+    kept = [row["task_id"] for row in rows]
+
+    assert len(kept) == 2
+    assert first not in kept
+    assert second in kept
+    assert third in kept
+
+
 def test_enqueue_hydrates_retry_description_from_payload(client):
     msg_id = "msg-20260101-120000"
     hydrated = "full payload contents"

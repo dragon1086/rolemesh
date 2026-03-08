@@ -3,6 +3,14 @@
 set -euo pipefail
 
 DB="${HOME}/ai-comms/registry.db"
+REQUIRED_CMDS=(sqlite3 python3 ps awk grep date)
+
+for cmd in "${REQUIRED_CMDS[@]}"; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "[status] 필수 커맨드 없음: $cmd"
+    exit 1
+  fi
+done
 
 if [[ ! -f "$DB" ]]; then
   echo "[status] DB 없음: $DB"
@@ -28,9 +36,14 @@ sqlite3 -column -header "$DB" \
 
 echo ""
 echo "--- Running Workers ---"
-ps aux | grep -E "rolemesh\.(queue_worker|message_worker|autoevo_worker)" | grep -v grep \
+ps aux | grep -E "rolemesh(\.workers)?\.(queue_worker|message_worker|autoevo_worker)" | grep -v grep \
   | awk '{print $2, $11, $12}' \
   || echo "(실행 중인 워커 없음)"
+
+for module in rolemesh.workers.queue_worker rolemesh.workers.message_worker rolemesh.workers.autoevo_worker; do
+  python3 -c "import importlib; importlib.import_module('${module}')" >/dev/null 2>&1 \
+    || echo "  module import failed: ${module}"
+done
 
 echo ""
 echo "--- Batch Cooldown Status ---"

@@ -28,19 +28,22 @@ That's it. RoleMesh finds the right agent for your task automatically.
                                        │  task text
                                        ▼
                         ┌─────────────────────────────┐
-                        │       PM (RegistryClient)   │
+                        │ PM (RegistryClient +        │
+                        │ SmartRouter)                │
                         │  • intent parsing           │
                         │  • capability matching      │
+                        │  • provider failover        │
                         │  • contract routing         │
                         └──────────────┬──────────────┘
                                        │  WorkItem
                           ┌────────────┼────────────┐
                           ▼            ▼            ▼
                ┌──────────────┐ ┌──────────┐ ┌──────────────┐
-               │   Builder    │ │ Analyst  │ │  AutoEvo     │
-               │ (QueueWorker)│ │(AmpCaller│ │  Worker      │
-               │ • executes   │ │• quality │ │• self-improve│
-               │   tasks      │ │  scoring │ │• rule updates│
+               │ Builder Pool │ │ Analyst  │ │  AutoEvo     │
+               │(QueueWorker +│ │(AmpCaller│ │  Worker      │
+               │ Codex/Claude)│ │• quality │ │• self-improve│
+               │ • executes   │ │  scoring │ │• rule updates│
+               │   tasks      │ │          │ │              │
                └──────────────┘ └──────────┘ └──────────────┘
                           │            │
                           └────────────┘
@@ -55,7 +58,8 @@ That's it. RoleMesh finds the right agent for your task automatically.
 
 **Roles:**
 - **PM** (`RegistryClient`) — routes tasks to the best registered agent by capability score
-- **Builder** (`queue_worker`) — executes tasks from the SQLite queue
+- **PM Runtime** (`SmartRouter`) — provider selection, fallback, circuit-breaker aware delegation
+- **Builder** (`queue_worker`) — executes tasks from the SQLite queue via Claude/Codex-capable delegates
 - **Analyst** (`amp_caller`) — quality scoring and PM packet evaluation
 - **AutoEvo** (`autoevo_worker`) — self-evolving rules and skill cleanup
 
