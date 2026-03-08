@@ -417,13 +417,23 @@ class SymphonyMACRS:
                     "persona_domain": out.get("persona_domain"),
                     "conflicts_count": len(out.get("conflicts", []) if isinstance(out.get("conflicts"), list) else []),
                 }
-                status = "done"
+                if out.get("fallback"):
+                    proof["fallback"] = True
+                    proof["fallback_reason"] = out.get("reason")
+                    status = "fallback"
+                else:
+                    status = "done"
             except Exception as e:
                 try:
                     out = ask_amp(item.description, force_tool="quick_answer", timeout=80)
                     summary = out.get("answer", "")[:700]
                     proof = {"tool": "quick_answer_fallback", "fallback_reason": str(e)}
-                    status = "done"
+                    if out.get("fallback"):
+                        proof["fallback"] = True
+                        proof["amp_reason"] = out.get("reason")
+                        status = "fallback"
+                    else:
+                        status = "done"
                 except Exception as e2:
                     summary = f"amp 호출 실패: {e2}"
                     proof = {"error": str(e2), "initial_error": str(e)}

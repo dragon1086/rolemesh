@@ -75,12 +75,74 @@ def _extract_done_report_v1(summary: str) -> dict | None:
     marker = "DONE_REPORT_V1:"
     if marker not in text:
         return None
-    raw = text.split(marker, 1)[1].strip().splitlines()[0].strip()
+
+    raw = text.split(marker, 1)[1].strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        if lines:
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        raw = "\n".join(lines).strip()
+
+    if not raw:
+        return None
+
+    if raw.startswith("{"):
+        raw = _extract_json_object(raw) or raw.splitlines()[0].strip()
+    else:
+        raw = raw.splitlines()[0].strip()
+
     try:
         payload = json.loads(raw)
     except Exception:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _extract_json_object(text: str) -> str | None:
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index, char in enumerate(text):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[: index + 1]
+    return None
+
+
+def _extract_score(report: dict) -> float | None:
+    candidates = [
+        report.get("score"),
+        report.get("quality_score"),
+        report.get("overall_score"),
+        (report.get("quality") or {}).get("score") if isinstance(report.get("quality"), dict) else None,
+        (report.get("metrics") or {}).get("score") if isinstance(report.get("metrics"), dict) else None,
+    ]
+
+    for value in candidates:
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _record_quality_scores(
@@ -93,7 +155,7 @@ def _record_quality_scores(
         if not report:
             continue
 
-        score = report.get("score")
+        score = _extract_score(report)
         if score is None:
             continue
 
@@ -109,7 +171,7 @@ def _record_quality_scores(
         try:
             quality_tracker.record(
                 batch_id=batch_id,
-                score=float(score),
+                score=score,
                 provider=provider,
                 timestamp=None if timestamp is None else float(timestamp),
             )

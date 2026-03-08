@@ -162,6 +162,31 @@ def test_symphony_guard_disabled_calls_ask_amp_directly(sf, monkeypatch):
     mock_ask.assert_called_once()
 
 
+def test_symphony_amp_fallback_result_maps_to_fallback_status(sf, monkeypatch):
+    """ask_amp가 fallback dict를 반환하면 execute()도 fallback status를 유지"""
+    import rolemesh.routing.symphony_fusion as sf_mod
+
+    monkeypatch.setattr(sf_mod, "_SF_GUARD", False)
+    monkeypatch.setattr(
+        sf_mod,
+        "ask_amp",
+        MagicMock(
+            return_value={
+                "fallback": True,
+                "reason": "amp unavailable",
+                "answer": "로컬 fallback",
+                "tool_used": "analyze",
+            }
+        ),
+    )
+
+    result = sf.execute(_analysis_item())
+
+    assert result.status == "fallback"
+    assert result.proof.get("fallback") is True
+    assert result.proof.get("fallback_reason") == "amp unavailable"
+
+
 # ---------------------------------------------------------------------------
 # 6. autoevo enqueue_round: throttle ok → client.enqueue 호출됨
 # ---------------------------------------------------------------------------

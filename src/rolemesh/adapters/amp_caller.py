@@ -21,8 +21,8 @@
 import json
 import re
 import time
-import httpx
 import asyncio
+import httpx
 from typing import Optional
 
 # amp MCP 서버 주소
@@ -100,6 +100,18 @@ def _log_timeout_event(event: str, tool: str, timeout_s: float, attempt: int, er
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+def _fallback_response(tool: str, reason: str, answer: str, *, raw: Optional[dict] = None) -> dict:
+    return {
+        "fallback": True,
+        "reason": reason,
+        "answer": answer,
+        "tool_used": tool,
+        "cser": None,
+        "cser_text": "",
+        "raw": raw or {},
+    }
 
 
 def _classify_tool(query: str, force_tool: Optional[str]) -> str:
@@ -222,15 +234,11 @@ def ask_amp(
     open_now, remain, last_err = _cb_is_open()
     if open_now:
         _log_timeout_event("circuit_open_skip", tool, float(tool_timeout), attempt=0, error=last_err, circuit_open=True)
-        return {
-            "fallback": True,
-            "reason": "amp circuit-open",
-            "answer": f"⚠️ amp 일시 차단 중({remain}s 남음). 로컬 fallback으로 진행.",
-            "tool_used": tool,
-            "cser": None,
-            "cser_text": "",
-            "raw": {},
-        }
+        return _fallback_response(
+            tool,
+            "amp circuit-open",
+            f"⚠️ amp 일시 차단 중({remain}s 남음). 로컬 fallback으로 진행.",
+        )
 
     http_timeout = httpx.Timeout(float(tool_timeout), connect=15.0)
     last_exc: str = ""
@@ -259,28 +267,13 @@ def ask_amp(
 
         except Exception as e:
             # 기타 오류 (HTTP 4xx, 파싱 오류 등) → 재시도 없이 즉시 폴백
-            return {
-                "fallback": True,
-                "reason": f"amp error: {type(e).__name__}",
-                "answer": f"⚠️ amp 호출 오류: {e}",
-                "tool_used": tool,
-                "cser": None,
-                "cser_text": "",
-                "raw": {},
-            }
+            _log_timeout_event("error_fallback", tool, float(tool_timeout), attempt=attempt + 1, error=str(e))
+            return _fallback_response(tool, f"amp error: {type(e).__name__}", f"⚠️ amp 호출 오류: {e}")
 
     # 모든 재시도 소진 → 폴백
     _cb_open(last_exc)
     _log_timeout_event("fallback_unavailable", tool, float(tool_timeout), attempt=3, error=last_exc, circuit_open=True)
-    return {
-        "fallback": True,
-        "reason": "amp unavailable",
-        "answer": "⚠️ amp 서버 불안정으로 로컬 fallback으로 진행.",
-        "tool_used": tool,
-        "cser": None,
-        "cser_text": "",
-        "raw": {},
-    }
+    return _fallback_response(tool, "amp unavailable", "⚠️ amp 서버 불안정으로 로컬 fallback으로 진행.")
 
 
 async def ask_amp_async(
@@ -319,20 +312,16 @@ async def ask_amp_async(
     open_now, remain, last_err = _cb_is_open()
     if open_now:
         _log_timeout_event("circuit_open_skip", tool, float(tool_timeout), attempt=0, error=last_err, circuit_open=True)
-        return {
-            "fallback": True,
-            "reason": "amp circuit-open",
-            "answer": f"⚠️ amp 일시 차단 중({remain}s 남음). 로컬 fallback으로 진행.",
-            "tool_used": tool,
-            "cser": None,
-            "cser_text": "",
-            "raw": {},
-        }
+        return _fallback_response(
+            tool,
+            "amp circuit-open",
+            f"⚠️ amp 일시 차단 중({remain}s 남음). 로컬 fallback으로 진행.",
+        )
 
     http_timeout = httpx.Timeout(float(tool_timeout), connect=15.0)
     last_exc: str = ""
 
-    for attempt in range(2):
+    for attempt in range(3):
         if attempt > 0:
             await asyncio.sleep(5)
 
@@ -355,27 +344,12 @@ async def ask_amp_async(
             continue
 
         except Exception as e:
-            return {
-                "fallback": True,
-                "reason": f"amp error: {type(e).__name__}",
-                "answer": f"⚠️ amp 호출 오류: {e}",
-                "tool_used": tool,
-                "cser": None,
-                "cser_text": "",
-                "raw": {},
-            }
+            _log_timeout_event("error_fallback", tool, float(tool_timeout), attempt=attempt + 1, error=str(e))
+            return _fallback_response(tool, f"amp error: {type(e).__name__}", f"⚠️ amp 호출 오류: {e}")
 
     _cb_open(last_exc)
     _log_timeout_event("fallback_unavailable", tool, float(tool_timeout), attempt=3, error=last_exc, circuit_open=True)
-    return {
-        "fallback": True,
-        "reason": "amp unavailable",
-        "answer": "⚠️ amp 서버 불안정으로 로컬 fallback으로 진행.",
-        "tool_used": tool,
-        "cser": None,
-        "cser_text": "",
-        "raw": {},
-    }
+    return _fallback_response(tool, "amp unavailable", "⚠️ amp 서버 불안정으로 로컬 fallback으로 진행.")
 
 
 if __name__ == "__main__":
