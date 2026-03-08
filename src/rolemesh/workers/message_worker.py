@@ -27,6 +27,35 @@ PID_FILE_TMPL = "/tmp/macrs_message_worker_{agent}.pid"
 POLL_INTERVAL = 5
 
 
+def _recover_stale_messages(client: RegistryClient, agent: str, stale_sec: int) -> int:
+    """processing 상태가 오래된 메시지를 pending으로 복구한다."""
+    now = int(time.time())
+    conn = client._conn_ctx()
+    with conn:
+        cur = conn.execute(
+            """
+            UPDATE messages
+            SET status='pending'
+            WHERE to_agent=? AND status='processing'
+              AND processed_at IS NOT NULL
+              AND processed_at < ?
+            """,
+            (agent, now - stale_sec),
+        )
+    return cur.rowcount
+
+
+def _process_claimed_messages(client: RegistryClient, agent: str, msgs: list[Message]) -> None:
+    for m in msgs:
+        try:
+            ok, detail = _handle(m, client, agent)
+            client.ack_message(m.id, status="done" if ok else "failed")
+            print(f"[msg-worker] {m.id} -> {'done' if ok else 'failed'} ({detail})")
+        except Exception as e:
+            client.ack_message(m.id, status="failed")
+            print(f"[msg-worker] {m.id} -> failed ({e})", file=sys.stderr)
+
+
 def _to_cokac(msg: Message) -> tuple[bool, str]:
     script = os.path.expanduser("~/.claude/scripts/claude-comms/send-message.sh")
     if not os.path.exists(script):
@@ -91,34 +120,20 @@ def run_loop(agent: str, poll: int = POLL_INTERVAL, stale_sec: int = 300) -> Non
     print(f"[msg-worker] start agent={agent} poll={poll}s stale={stale_sec}s pid={os.getpid()}")
 
     while True:
-        # 처리 중에서 장시간 멈춘 메시지 복구 (processing -> pending)
-        now = int(time.time())
-        conn = client._conn_ctx()
-        with conn:
-            conn.execute(
-                """
-                UPDATE messages
-                SET status='pending'
-                WHERE to_agent=? AND status='processing'
-                  AND processed_at IS NOT NULL
-                  AND processed_at < ?
-                """,
-                (agent, now - stale_sec),
-            )
+        try:
+            recovered = _recover_stale_messages(client, agent, stale_sec)
+            if recovered:
+                print(f"[msg-worker] recovered {recovered} stale messages for {agent}")
 
-        msgs = client.claim_pending(to_agent=agent, limit=20)
-        if not msgs:
+            msgs = client.claim_pending(to_agent=agent, limit=20)
+            if not msgs:
+                time.sleep(poll)
+                continue
+
+            _process_claimed_messages(client, agent, msgs)
+        except Exception as e:
+            print(f"[msg-worker] loop error for {agent}: {e}", file=sys.stderr)
             time.sleep(poll)
-            continue
-
-        for m in msgs:
-            try:
-                ok, detail = _handle(m, client, agent)
-                client.ack_message(m.id, status="done" if ok else "failed")
-                print(f"[msg-worker] {m.id} -> {'done' if ok else 'failed'} ({detail})")
-            except Exception as e:
-                client.ack_message(m.id, status="failed")
-                print(f"[msg-worker] {m.id} -> failed ({e})", file=sys.stderr)
 
 
 def daemonize(pid_file: str) -> None:

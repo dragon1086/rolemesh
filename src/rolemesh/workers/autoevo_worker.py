@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 import signal
 import sqlite3
 import sys
@@ -45,8 +46,14 @@ def _load_state() -> dict:
 
 def _save_state(st: dict) -> None:
     try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
+        state_dir = os.path.dirname(STATE_FILE) or "."
+        os.makedirs(state_dir, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(prefix="autoevo-state-", suffix=".tmp", dir=state_dir)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(st, f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, STATE_FILE)
     except Exception:
         pass
 
@@ -238,30 +245,34 @@ def enqueue_round(client: RegistryClient, conn: sqlite3.Connection, round_no: in
                 if _wait2 is not True:
                     print(f"[rolemesh-autoevo] throttle retry failed, skip enqueue: {title}")
                     continue
-        task_id = client.enqueue(
-            title=f"[R{round_no}] {title}",
-            description=(
-                f"주제: {TOPIC}\n"
-                f"라운드: R{round_no}\n"
-                f"요청: {desc}\n"
-                f"완료 시 result_summary에 핵심 3줄 요약 작성"
-            ),
-            kind=kind,
-            priority=prio,
-            source=SOURCE,
-        )
+        try:
+            task_id = client.enqueue(
+                title=f"[R{round_no}] {title}",
+                description=(
+                    f"주제: {TOPIC}\n"
+                    f"라운드: R{round_no}\n"
+                    f"요청: {desc}\n"
+                    f"완료 시 result_summary에 핵심 3줄 요약 작성"
+                ),
+                kind=kind,
+                priority=prio,
+                source=SOURCE,
+            )
+        except Exception as e:
+            print(f"[rolemesh-autoevo] enqueue failed: {title} ({e})", file=sys.stderr)
+            continue
         ids.append(task_id)
     return ids
 
 
 def run_loop(poll_sec: int = 60) -> None:
     client = RegistryClient()
-    conn = client._conn_ctx()
     st = _load_state()
     print(f"[rolemesh-autoevo] started poll={poll_sec}s pid={os.getpid()}")
 
     while True:
         try:
+            conn = client._conn_ctx()
             paused, remain, reason = _is_paused(st)
             if paused:
                 resume, why = _should_resume(conn, st)

@@ -2,7 +2,7 @@
 
 Role-first local AI orchestration for non-developers.
 
-Current release: `v0.2.1`
+Current release: `v0.2.2`
 
 ## Quick Start
 
@@ -67,11 +67,12 @@ That's it. RoleMesh finds the right agent for your task automatically.
 
 ## Status
 
-`v0.2.1` includes:
+`v0.2.2` includes:
 - contract-first routing and PM quality tracking
 - provider-aware delegation via `smart-delegate.sh` and `codex-delegate.sh`
 - integration CLI for external agent registration and delegate generation
 - launchd/status scripts for local worker operations
+- message/autoevo worker loop hardening and release feedback-loop fixes
 
 Check live worker health:
 

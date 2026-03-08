@@ -9,6 +9,7 @@ import json
 import os
 import sqlite3
 import time
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -246,3 +247,25 @@ def test_empty_streak_below_limit_no_pause(tmp_state_file):
     assert st["empty_streak"] < aw.EMPTY_STREAK_LIMIT
     paused, _, _ = aw._is_paused(st)
     assert paused is False
+
+
+def test_enqueue_round_continues_after_single_enqueue_failure(monkeypatch):
+    client = MagicMock()
+    conn = MagicMock()
+    conn.execute.return_value.fetchall.return_value = []
+
+    calls = {"n": 0}
+
+    def _enqueue(**kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("first enqueue failed")
+        return f"task-{calls['n']}"
+
+    client.enqueue.side_effect = _enqueue
+    monkeypatch.setattr(aw, "_AUTOEVO_THROTTLE", False)
+
+    ids = aw.enqueue_round(client, conn, round_no=5)
+
+    assert len(ids) > 0
+    assert client.enqueue.call_count == 6

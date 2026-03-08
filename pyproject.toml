@@ -4,7 +4,7 @@ build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name = "rolemesh"
-version = "0.2.1"
+version = "0.2.2"
 description = "Role-first local AI orchestration for non-developers"
 readme = "README.md"
 requires-python = ">=3.10"

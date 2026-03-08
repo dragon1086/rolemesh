@@ -1,4 +1,4 @@
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 # Core
 from .core.registry_client import RegistryClient, AgentMatch, Message

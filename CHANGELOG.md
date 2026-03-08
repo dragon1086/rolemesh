@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.2] - 2026-03-08
+
+### Fixed
+- message worker에 stale message 복구 로깅과 루프 단위 예외 경계를 추가해 소비 루프 중단 리스크를 완화
+- autoevo state 저장을 atomic replace로 바꿔 pause/resume 상태파일 partial write 가능성을 제거
+- autoevo enqueue를 태스크 단위 예외 처리로 분리해 단일 enqueue 실패가 라운드 전체를 끊지 않도록 보강
+- autoevo 루프에서 DB connection을 iteration마다 재확인해 장시간 실행 중 stale connection 복구성을 높임
+- README/패키지 버전을 `v0.2.2`로 정리하고 Codex Pro 일시적 builder 전제 문구를 일반 Codex builder 표현으로 유지
+
 ## [0.2.1] - 2026-03-08
 
 ### Fixed
