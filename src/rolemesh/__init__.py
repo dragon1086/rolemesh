@@ -1,6 +1,8 @@
-from registry_client import RegistryClient, AgentMatch, Message
-from symphony_fusion import SymphonyMACRS, WorkItem, WorkResult
-from amp_caller import ask_amp, ask_amp_async
+__version__ = "0.1.0"
+
+from .registry_client import RegistryClient, AgentMatch, Message
+from .symphony_fusion import SymphonyMACRS, WorkItem, WorkResult
+from .amp_caller import ask_amp, ask_amp_async
 
 __all__ = [
     "RegistryClient",

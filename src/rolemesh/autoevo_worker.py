@@ -14,7 +14,7 @@ import sqlite3
 import sys
 import time
 
-from registry_client import RegistryClient
+from .registry_client import RegistryClient
 
 PID_FILE = "/tmp/rolemesh-autoevo-worker.pid"
 TOPIC = "요즘 오픈클로나 별에 별 AI가 나와서 뭘써야할지 모르겠어서 많이 받아놨어. 진짜 쓸모있게 쓰는 법 어디 없나?"

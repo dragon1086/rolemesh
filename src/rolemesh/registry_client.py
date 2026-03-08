@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
-from init_db import init_db
+from .init_db import init_db
 
 DEFAULT_DB_PATH = os.path.expanduser("~/ai-comms/registry.db")
 ROUTING_LOG_PATH = os.path.expanduser("~/ai-comms/routing_log.jsonl")

@@ -17,13 +17,13 @@ def _usage():
 
 
 def _cmd_init():
-    from installer import main
+    from .installer import main
     main()
 
 
 def _cmd_agents():
     import os
-    from registry_client import RegistryClient
+    from .registry_client import RegistryClient
     db_path = os.environ.get("ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db"))
     client = RegistryClient(db_path=db_path)
     agents = client.list_agents(active_only=False)
@@ -39,7 +39,7 @@ def _cmd_agents():
 
 def _cmd_status():
     import os
-    from registry_client import RegistryClient
+    from .registry_client import RegistryClient
     db_path = os.environ.get("ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db"))
     client = RegistryClient(db_path=db_path)
     counts = client.queue_counts()
@@ -51,7 +51,7 @@ def _cmd_status():
 
 def _cmd_route(task_text: str):
     import os
-    from registry_client import RegistryClient
+    from .registry_client import RegistryClient
     db_path = os.environ.get("ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db"))
     client = RegistryClient(db_path=db_path)
     matches = client.lookup(task_text, top_k=3)

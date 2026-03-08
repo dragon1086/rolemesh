@@ -23,8 +23,8 @@ import uuid
 from dataclasses import dataclass, asdict
 from typing import Any
 
-from registry_client import RegistryClient
-from amp_caller import ask_amp
+from .registry_client import RegistryClient
+from .amp_caller import ask_amp
 try:
     from .contracts import build_contract  # package import
 except Exception:
@@ -205,6 +205,8 @@ class SymphonyMACRS:
                 "agent": "claude-code",
                 "guidance": [
                     "작업 전 구현 범위를 3~5개 체크리스트로 명시",
+                    "[MANDATORY] 코딩 작업은 Superpowers 워크플로우(브레인스토밍→설계확정→작업계획→TDD→코드리뷰)를 기본 절차로 적용",
+                    "Superpowers 단계 산출물(설계 요약/작업계획/테스트근거)을 완료보고에 포함",
                     "불명확 스펙은 임의 구현 대신 질문 또는 defer",
                     "완료 보고는 중복 없이 1회(요약+proof)로 전송",
                 ],
@@ -371,7 +373,7 @@ class SymphonyMACRS:
         if assignee == "amp":
             try:
                 # practical mode: 속도 우선(90s), 실패 시 quick_answer fallback
-                out = ask_amp(item.description, force_tool="analyze", timeout=90)
+                out = ask_amp(item.description, force_tool="analyze", timeout=150)
                 summary = out.get("answer", "")[:700]
                 proof = {
                     "tool": "analyze",
@@ -382,7 +384,7 @@ class SymphonyMACRS:
                 status = "done"
             except Exception as e:
                 try:
-                    out = ask_amp(item.description, force_tool="quick_answer", timeout=40)
+                    out = ask_amp(item.description, force_tool="quick_answer", timeout=80)
                     summary = out.get("answer", "")[:700]
                     proof = {"tool": "quick_answer_fallback", "fallback_reason": str(e)}
                     status = "done"
@@ -444,3 +446,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# Naming clarity alias (non-breaking):
+RoleMeshOrchestrator = SymphonyMACRS

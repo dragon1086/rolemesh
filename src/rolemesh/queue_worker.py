@@ -18,8 +18,8 @@ import subprocess
 import sys
 import time
 
-from registry_client import RegistryClient
-from symphony_fusion import SymphonyMACRS, WorkItem
+from .registry_client import RegistryClient
+from .symphony_fusion import SymphonyMACRS, WorkItem
 
 
 PID_FILE = "/tmp/macrs_worker.pid"
