@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rolemesh.throttle import TokenBucketThrottle, _STATE_DIR, _STATE_PREFIX
+from rolemesh.adapters.throttle import TokenBucketThrottle, _STATE_DIR, _STATE_PREFIX
 
 
 # ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ from rolemesh.throttle import TokenBucketThrottle, _STATE_DIR, _STATE_PREFIX
 @pytest.fixture(autouse=True)
 def clean_throttle_files(tmp_path, monkeypatch):
     """Redirect throttle state files to tmp_path so tests don't share state."""
-    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.throttle._STATE_DIR", tmp_path)
     yield
 
 
@@ -120,7 +120,7 @@ def test_tokens_refill_over_simulated_time(throttle):
     assert result_before > 0
 
     # Simulate 3 seconds elapsed (anthropic=20rpm → rate=1/3 tok/s → ~1 token in 3s)
-    with patch("rolemesh.throttle.time.time", return_value=time.time() + 3.1):
+    with patch("rolemesh.adapters.throttle.time.time", return_value=time.time() + 3.1):
         result_after = throttle.acquire("anthropic")
     assert result_after is True
 
@@ -146,7 +146,7 @@ def test_rpm_overrides_applied():
 
 def test_state_persists_across_instances(tmp_path, monkeypatch):
     """Bucket state written by one instance is read by another."""
-    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.throttle._STATE_DIR", tmp_path)
 
     t1 = TokenBucketThrottle(rpm_overrides={"anthropic": 20})
     t1.drain("anthropic")
@@ -164,10 +164,10 @@ def test_state_persists_across_instances(tmp_path, monkeypatch):
 
 def test_select_provider_returns_provider_when_available(tmp_path, monkeypatch):
     """_select_provider_with_throttle returns a provider name on fresh state."""
-    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
-    monkeypatch.setattr("rolemesh.circuit_breaker._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.throttle._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.circuit_breaker._STATE_DIR", tmp_path)
 
-    from rolemesh.queue_worker import _select_provider_with_throttle, _router, _throttle
+    from rolemesh.workers.queue_worker import _select_provider_with_throttle, _router, _throttle
     # Reset router state to make providers available
     for p in ["anthropic", "openai", "gemini"]:
         _router.cb.reset(p)
@@ -184,10 +184,10 @@ def test_select_provider_returns_provider_when_available(tmp_path, monkeypatch):
 
 def test_select_provider_returns_none_when_all_open(tmp_path, monkeypatch):
     """When all providers are OPEN, _select_provider_with_throttle returns None."""
-    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
-    monkeypatch.setattr("rolemesh.circuit_breaker._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.throttle._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.circuit_breaker._STATE_DIR", tmp_path)
 
-    from rolemesh.queue_worker import _select_provider_with_throttle, _router
+    from rolemesh.workers.queue_worker import _select_provider_with_throttle, _router
     for p in ["anthropic", "openai", "gemini"]:
         for _ in range(3):
             _router.record_failure(p)
@@ -203,11 +203,11 @@ def test_select_provider_returns_none_when_all_open(tmp_path, monkeypatch):
 
 def test_run_task_reschedules_when_no_provider(tmp_path, monkeypatch):
     """_run_task reschedules with retry_after=60 when no provider is available."""
-    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
-    monkeypatch.setattr("rolemesh.circuit_breaker._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.throttle._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.circuit_breaker._STATE_DIR", tmp_path)
 
-    from rolemesh import queue_worker
-    from rolemesh.queue_worker import _router
+    from rolemesh.workers import queue_worker
+    from rolemesh.workers.queue_worker import _router
 
     # Open all circuits
     for p in ["anthropic", "openai", "gemini"]:

@@ -4,7 +4,7 @@ queue_counts / move_to_dlq / retry_task 단위 테스트
 """
 import time
 import pytest
-from registry_client import RegistryClient
+from rolemesh.core.registry_client import RegistryClient
 
 
 @pytest.fixture

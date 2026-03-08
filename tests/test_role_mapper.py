@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from rolemesh.role_mapper import RoleMapper, RoleSuggestion
+from rolemesh.routing.role_mapper import RoleMapper, RoleSuggestion
 
 
 # ── 헬퍼 ─────────────────────────────────────────────────────────────────

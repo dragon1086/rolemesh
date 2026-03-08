@@ -4,14 +4,14 @@ retry 카운터 증가 / retry 소진 시 DLQ 이동 단위 테스트
 """
 import pytest
 from unittest.mock import MagicMock, patch
-from queue_worker import _run_task
+from rolemesh.workers.queue_worker import _run_task
 
 
 @pytest.fixture(autouse=True)
 def isolate_cb_throttle_state(tmp_path, monkeypatch):
     """Redirect CB and throttle state files to tmp_path to prevent cross-test pollution."""
-    monkeypatch.setattr("rolemesh.circuit_breaker._STATE_DIR", tmp_path)
-    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.circuit_breaker._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.throttle._STATE_DIR", tmp_path)
     yield
 
 
@@ -44,7 +44,7 @@ def test_first_failure_retries_with_count_1(client, orchestrator):
     orchestrator.run_goal.side_effect = RuntimeError("first failure")
     task = make_task(retry_count=0)
 
-    with patch("queue_worker._send_openclaw_event"):
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"):
         _run_task(task, orchestrator, client)
 
     client.retry_task.assert_called_once_with("test-task-id", 1, 30)
@@ -56,7 +56,7 @@ def test_second_failure_retries_with_count_2(client, orchestrator):
     orchestrator.run_goal.side_effect = RuntimeError("second failure")
     task = make_task(retry_count=1)
 
-    with patch("queue_worker._send_openclaw_event"):
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"):
         _run_task(task, orchestrator, client)
 
     client.retry_task.assert_called_once_with("test-task-id", 2, 60)
@@ -68,7 +68,7 @@ def test_third_failure_retries_with_count_3(client, orchestrator):
     orchestrator.run_goal.side_effect = RuntimeError("third failure")
     task = make_task(retry_count=2)
 
-    with patch("queue_worker._send_openclaw_event"):
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"):
         _run_task(task, orchestrator, client)
 
     client.retry_task.assert_called_once_with("test-task-id", 3, 120)
@@ -82,7 +82,7 @@ def test_retry_exhausted_moves_to_dlq(client, orchestrator):
     orchestrator.run_goal.side_effect = RuntimeError("fatal")
     task = make_task(retry_count=3)
 
-    with patch("queue_worker._send_openclaw_event"):
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"):
         _run_task(task, orchestrator, client)
 
     client.move_to_dlq.assert_called_once()
@@ -95,7 +95,7 @@ def test_retry_exhausted_includes_error_message(client, orchestrator):
     orchestrator.run_goal.side_effect = RuntimeError("specific error message")
     task = make_task(retry_count=3)
 
-    with patch("queue_worker._send_openclaw_event"):
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"):
         _run_task(task, orchestrator, client)
 
     reason_arg = client.move_to_dlq.call_args[0][1]
@@ -109,8 +109,8 @@ def test_success_no_retry_no_dlq(client, orchestrator):
     orchestrator.run_goal.return_value = {"results": [{"summary": "done ok"}]}
     task = make_task(retry_count=0)
 
-    with patch("queue_worker._send_openclaw_event"), \
-         patch("queue_worker._allow_done_event", return_value=False):
+    with patch("rolemesh.workers.queue_worker._send_openclaw_event"), \
+         patch("rolemesh.workers.queue_worker._allow_done_event", return_value=False):
         _run_task(task, orchestrator, client)
 
     client.retry_task.assert_not_called()

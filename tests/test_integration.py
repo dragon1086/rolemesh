@@ -3,7 +3,7 @@ tests/test_integration.py
 IntegrationManager — add / list / remove 단위 테스트 (최소 8개)
 """
 import pytest
-from rolemesh.integration import (
+from rolemesh.routing.integration import (
     IntegrationManager,
     DuplicateIntegrationError,
     IntegrationNotFoundError,

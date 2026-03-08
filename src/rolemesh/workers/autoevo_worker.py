@@ -14,11 +14,11 @@ import sqlite3
 import sys
 import time
 
-from .registry_client import RegistryClient
+from ..core.registry_client import RegistryClient
 
 # RoleMesh Throttle guard (graceful degradation if unavailable)
 try:
-    from .throttle import TokenBucketThrottle as _Throttle
+    from ..adapters.throttle import TokenBucketThrottle as _Throttle
     _autoevo_throttle = _Throttle()
     _AUTOEVO_THROTTLE = True
 except Exception:

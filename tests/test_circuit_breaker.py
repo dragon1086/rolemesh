@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from rolemesh.circuit_breaker import CBState, ProviderCircuitBreaker
-from rolemesh.provider_router import FALLBACK_PROVIDER, ProviderRouter
+from rolemesh.adapters.circuit_breaker import CBState, ProviderCircuitBreaker
+from rolemesh.adapters.provider_router import FALLBACK_PROVIDER, ProviderRouter
 
 
 # ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@ from rolemesh.provider_router import FALLBACK_PROVIDER, ProviderRouter
 @pytest.fixture(autouse=True)
 def clean_cb_files(tmp_path, monkeypatch):
     """Redirect CB state files to tmp_path so tests don't share state."""
-    monkeypatch.setattr("rolemesh.circuit_breaker._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.circuit_breaker._STATE_DIR", tmp_path)
     yield
     # cleanup is automatic with tmp_path
 
@@ -76,7 +76,7 @@ def test_open_transitions_to_half_open_after_cooldown(cb):
 
     # Simulate cooldown elapsed by patching time.time
     future = time.time() + 61
-    with patch("rolemesh.circuit_breaker.time.time", return_value=future):
+    with patch("rolemesh.adapters.circuit_breaker.time.time", return_value=future):
         state = cb.get_state("gemini")
     assert state == CBState.HALF_OPEN
 
@@ -91,7 +91,7 @@ def test_half_open_success_to_closed(cb):
         cb.record_failure("anthropic")
 
     future = time.time() + 61
-    with patch("rolemesh.circuit_breaker.time.time", return_value=future):
+    with patch("rolemesh.adapters.circuit_breaker.time.time", return_value=future):
         assert cb.is_available("anthropic") is True  # HALF_OPEN
         cb.record_success("anthropic")
 
@@ -108,7 +108,7 @@ def test_half_open_failure_back_to_open(cb):
         cb.record_failure("openai")
 
     future = time.time() + 61
-    with patch("rolemesh.circuit_breaker.time.time", return_value=future):
+    with patch("rolemesh.adapters.circuit_breaker.time.time", return_value=future):
         assert cb.is_available("openai") is True  # HALF_OPEN
         cb.record_failure("openai")
         state = cb.get_state("openai")

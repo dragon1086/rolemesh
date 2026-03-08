@@ -15,7 +15,7 @@ integration.py — RoleMesh Integration Manager
 import os
 from typing import Optional
 
-from .registry_client import RegistryClient
+from ..core.registry_client import RegistryClient
 
 DEFAULT_DB_PATH = os.environ.get(
     "ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db")

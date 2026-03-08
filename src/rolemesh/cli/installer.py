@@ -157,7 +157,7 @@ class RoleMeshInstaller:
         os.makedirs(db_dir, exist_ok=True)
 
         # init_db.py의 init_db() 호출
-        from init_db import init_db
+        from ..core.init_db import init_db
         conn = init_db(self.db_path)
         conn.close()
 
@@ -165,7 +165,7 @@ class RoleMeshInstaller:
 
     def register_roles(self, roles: list[RoleConfig]) -> None:
         """추천된 역할들을 registry에 등록."""
-        from registry_client import RegistryClient
+        from ..core.registry_client import RegistryClient
         client = RegistryClient(db_path=self.db_path)
         try:
             for role in roles:

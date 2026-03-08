@@ -5,7 +5,7 @@ IntentGate 오탐/미탐 회귀 테스트 — 최소 10개 케이스
 """
 import pytest
 from unittest.mock import MagicMock
-from symphony_fusion import SymphonyMACRS, WorkItem
+from rolemesh.routing.symphony_fusion import SymphonyMACRS, WorkItem
 
 
 @pytest.fixture

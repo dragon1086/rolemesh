@@ -23,17 +23,17 @@ import uuid
 from dataclasses import dataclass, asdict
 from typing import Any
 
-from .registry_client import RegistryClient
-from .amp_caller import ask_amp
+from ..core.registry_client import RegistryClient
+from ..adapters.amp_caller import ask_amp
 try:
-    from .contracts import build_contract  # package import
+    from ..core.contracts import build_contract  # package import
 except Exception:
     from contracts import build_contract  # script/local import fallback
 
 # RoleMesh CB/Throttle guard (graceful degradation if unavailable)
 try:
-    from .circuit_breaker import ProviderCircuitBreaker as _ProviderCB
-    from .throttle import TokenBucketThrottle as _Throttle
+    from ..adapters.circuit_breaker import ProviderCircuitBreaker as _ProviderCB
+    from ..adapters.throttle import TokenBucketThrottle as _Throttle
     _sf_cb = _ProviderCB()
     _sf_throttle = _Throttle()
     _SF_GUARD = True

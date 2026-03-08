@@ -19,10 +19,10 @@ import subprocess
 import sys
 import time
 
-from .registry_client import RegistryClient
-from .symphony_fusion import SymphonyMACRS, WorkItem
-from .provider_router import ProviderRouter
-from .throttle import TokenBucketThrottle
+from ..core.registry_client import RegistryClient
+from ..routing.symphony_fusion import SymphonyMACRS, WorkItem
+from ..adapters.provider_router import ProviderRouter
+from ..adapters.throttle import TokenBucketThrottle
 
 
 PID_FILE = "/tmp/macrs_worker.pid"
@@ -135,7 +135,7 @@ def _select_provider_with_throttle(task_id: str, client: RegistryClient) -> str 
     Returns provider name, or None if all providers are exhausted
     (caller should reschedule the task).
     """
-    from .provider_router import FALLBACK_PROVIDER
+    from ..adapters.provider_router import FALLBACK_PROVIDER
 
     for attempt in range(THROTTLE_MAX_RETRIES):
         provider = _router.route()

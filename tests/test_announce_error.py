@@ -8,16 +8,12 @@ test_announce_error.py — completed_with_announce_error 상태 분리 시뮬레
 """
 
 import subprocess
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-# queue_worker 모듈의 의존성을 mock
-import sys
-sys.modules["registry_client"] = MagicMock()
-sys.modules["symphony_fusion"] = MagicMock()
-
-import queue_worker
-from queue_worker import _run_task
+from rolemesh.workers import queue_worker
+from rolemesh.workers.queue_worker import _run_task
 
 
 class TestAnnounceErrorSeparation(unittest.TestCase):
@@ -73,7 +69,7 @@ class TestAnnounceErrorSeparation(unittest.TestCase):
     @patch.object(queue_worker, "_should_notify_done", return_value=True)
     @patch.object(queue_worker, "_send_openclaw_event")
     def test_body_failure(self, mock_send, mock_notify, mock_allow):
-        """본체 실패 → failed (기존 동작 유지)"""
+        """본체 실패 → retry 예약 (retry_count=0이므로 재시도)"""
         client = MagicMock()
         orch = MagicMock()
         orch.run_goal.side_effect = RuntimeError("boom")
@@ -81,9 +77,9 @@ class TestAnnounceErrorSeparation(unittest.TestCase):
 
         _run_task(task, orch, client)
 
-        client.complete_task.assert_called_once()
-        call_kwargs = client.complete_task.call_args
-        self.assertIn("boom", str(call_kwargs))
+        # Worker retries on first failure (retry_count=0 < max_retries=3)
+        client.retry_task.assert_called_once()
+        client.complete_task.assert_not_called()
 
     @patch.object(queue_worker, "_allow_done_event", return_value=True)
     @patch.object(queue_worker, "_should_notify_done", return_value=False)
@@ -103,7 +99,7 @@ class TestAnnounceErrorSeparation(unittest.TestCase):
     @patch.object(queue_worker, "_should_notify_done", return_value=True)
     @patch.object(queue_worker, "_send_openclaw_event")
     def test_body_fail_announce_also_fails(self, mock_send, mock_notify, mock_allow):
-        """본체 실패 + announce도 실패 → failed (announce 실패 무시)"""
+        """본체 실패 + announce도 실패 → retry 예약 (announce 실패 무시, body 실패 기준)"""
         client = MagicMock()
         orch = MagicMock()
         orch.run_goal.side_effect = RuntimeError("body error")
@@ -112,11 +108,9 @@ class TestAnnounceErrorSeparation(unittest.TestCase):
 
         _run_task(task, orch, client)
 
-        client.complete_task.assert_called_once()
-        call_kwargs = client.complete_task.call_args
-        # status should not contain announce error — it's a body failure
-        self.assertNotIn("completed_with_announce_error", str(call_kwargs))
-        self.assertIn("body error", str(call_kwargs))
+        # Worker retries on first failure (retry_count=0 < max_retries=3)
+        client.retry_task.assert_called_once()
+        client.complete_task.assert_not_called()
 
 
 if __name__ == "__main__":

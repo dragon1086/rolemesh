@@ -20,8 +20,8 @@ import subprocess
 import sys
 import time
 
-from .registry_client import RegistryClient, Message
-from .amp_caller import ask_amp
+from ..core.registry_client import RegistryClient, Message
+from ..adapters.amp_caller import ask_amp
 
 PID_FILE_TMPL = "/tmp/macrs_message_worker_{agent}.pid"
 POLL_INTERVAL = 5

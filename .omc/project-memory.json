@@ -86,14 +86,14 @@
   "hotPaths": [
     {
       "path": "src/rolemesh/queue_worker.py",
-      "accessCount": 40,
-      "lastAccessed": 1772976980067,
+      "accessCount": 42,
+      "lastAccessed": 1772978300392,
       "type": "file"
     },
     {
       "path": "src/rolemesh/__main__.py",
-      "accessCount": 26,
-      "lastAccessed": 1772977147106,
+      "accessCount": 30,
+      "lastAccessed": 1772978582083,
       "type": "file"
     },
     {
@@ -103,15 +103,45 @@
       "type": "directory"
     },
     {
+      "path": "tests/test_throttle.py",
+      "accessCount": 24,
+      "lastAccessed": 1772979031738,
+      "type": "file"
+    },
+    {
       "path": "src/rolemesh/symphony_fusion.py",
-      "accessCount": 19,
-      "lastAccessed": 1772976133631,
+      "accessCount": 23,
+      "lastAccessed": 1772978307385,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/__init__.py",
+      "accessCount": 22,
+      "lastAccessed": 1772978576249,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_queue_worker.py",
+      "accessCount": 22,
+      "lastAccessed": 1772978773531,
       "type": "file"
     },
     {
       "path": "src/rolemesh/registry_client.py",
-      "accessCount": 19,
-      "lastAccessed": 1772976741287,
+      "accessCount": 21,
+      "lastAccessed": 1772978202143,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_circuit_breaker.py",
+      "accessCount": 16,
+      "lastAccessed": 1772978993540,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/autoevo_worker.py",
+      "accessCount": 15,
+      "lastAccessed": 1772978301528,
       "type": "file"
     },
     {
@@ -121,21 +151,9 @@
       "type": "file"
     },
     {
-      "path": "src/rolemesh/autoevo_worker.py",
-      "accessCount": 13,
-      "lastAccessed": 1772976268658,
-      "type": "file"
-    },
-    {
-      "path": "src/rolemesh/__init__.py",
-      "accessCount": 12,
-      "lastAccessed": 1772974211796,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_queue_worker.py",
-      "accessCount": 12,
-      "lastAccessed": 1772976438106,
+      "path": "tests/test_e2e_smoke.py",
+      "accessCount": 14,
+      "lastAccessed": 1772978905303,
       "type": "file"
     },
     {
@@ -146,8 +164,38 @@
     },
     {
       "path": "src/rolemesh/amp_caller.py",
-      "accessCount": 9,
-      "lastAccessed": 1772976031167,
+      "accessCount": 11,
+      "lastAccessed": 1772978307052,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/circuit_breaker.py",
+      "accessCount": 10,
+      "lastAccessed": 1772978301787,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/installer.py",
+      "accessCount": 10,
+      "lastAccessed": 1772978310261,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_registry_client.py",
+      "accessCount": 10,
+      "lastAccessed": 1772978833139,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_symphony_fusion.py",
+      "accessCount": 10,
+      "lastAccessed": 1772978837243,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_installer.py",
+      "accessCount": 10,
+      "lastAccessed": 1772979052456,
       "type": "file"
     },
     {
@@ -157,15 +205,21 @@
       "type": "file"
     },
     {
-      "path": "src/rolemesh/circuit_breaker.py",
+      "path": "src/rolemesh/throttle.py",
       "accessCount": 8,
-      "lastAccessed": 1772976024131,
+      "lastAccessed": 1772978302690,
       "type": "file"
     },
     {
-      "path": "src/rolemesh/installer.py",
+      "path": "src/rolemesh/provider_router.py",
       "accessCount": 8,
-      "lastAccessed": 1772977122209,
+      "lastAccessed": 1772978302762,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_autoevo_pause_resume.py",
+      "accessCount": 8,
+      "lastAccessed": 1772978782395,
       "type": "file"
     },
     {
@@ -175,45 +229,9 @@
       "type": "file"
     },
     {
-      "path": "tests/test_e2e_smoke.py",
-      "accessCount": 6,
-      "lastAccessed": 1772974074472,
-      "type": "file"
-    },
-    {
       "path": "scripts/status.sh",
       "accessCount": 6,
       "lastAccessed": 1772974601343,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_registry_client.py",
-      "accessCount": 6,
-      "lastAccessed": 1772974867993,
-      "type": "file"
-    },
-    {
-      "path": "src/rolemesh/throttle.py",
-      "accessCount": 6,
-      "lastAccessed": 1772976024392,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_circuit_breaker.py",
-      "accessCount": 6,
-      "lastAccessed": 1772976052932,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_symphony_fusion.py",
-      "accessCount": 6,
-      "lastAccessed": 1772976053135,
-      "type": "file"
-    },
-    {
-      "path": "src/rolemesh/provider_router.py",
-      "accessCount": 6,
-      "lastAccessed": 1772977049393,
       "type": "file"
     },
     {
@@ -221,6 +239,36 @@
       "accessCount": 6,
       "lastAccessed": 1772977193366,
       "type": "file"
+    },
+    {
+      "path": "src/rolemesh/message_worker.py",
+      "accessCount": 6,
+      "lastAccessed": 1772978300930,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/integration.py",
+      "accessCount": 6,
+      "lastAccessed": 1772978308537,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_integration.py",
+      "accessCount": 6,
+      "lastAccessed": 1772978734729,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_intentgate_regression.py",
+      "accessCount": 6,
+      "lastAccessed": 1772978827971,
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 6,
+      "lastAccessed": 1772978960233,
+      "type": "directory"
     },
     {
       "path": "README.md",
@@ -232,12 +280,6 @@
       "path": "scripts/start_all_workers.sh",
       "accessCount": 4,
       "lastAccessed": 1772971662994,
-      "type": "file"
-    },
-    {
-      "path": "src/rolemesh/message_worker.py",
-      "accessCount": 4,
-      "lastAccessed": 1772974301464,
       "type": "file"
     },
     {
@@ -253,12 +295,6 @@
       "type": "file"
     },
     {
-      "path": "src/rolemesh/integration.py",
-      "accessCount": 4,
-      "lastAccessed": 1772976168413,
-      "type": "file"
-    },
-    {
       "path": "src/rolemesh",
       "accessCount": 4,
       "lastAccessed": 1772976740970,
@@ -268,6 +304,18 @@
       "path": "scripts/pm_quality_check.sh",
       "accessCount": 4,
       "lastAccessed": 1772976792973,
+      "type": "file"
+    },
+    {
+      "path": "src/rolemesh/contracts.py",
+      "accessCount": 4,
+      "lastAccessed": 1772978201386,
+      "type": "file"
+    },
+    {
+      "path": "examples/quickstart/run_demo.sh",
+      "accessCount": 4,
+      "lastAccessed": 1772978219111,
       "type": "file"
     },
     {
@@ -289,45 +337,9 @@
       "type": "file"
     },
     {
-      "path": "tests/test_installer.py",
-      "accessCount": 2,
-      "lastAccessed": 1772971785672,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_intentgate_regression.py",
-      "accessCount": 2,
-      "lastAccessed": 1772973962489,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_autoevo_pause_resume.py",
-      "accessCount": 2,
-      "lastAccessed": 1772973999520,
-      "type": "file"
-    },
-    {
-      "path": "src",
-      "accessCount": 2,
-      "lastAccessed": 1772974187115,
-      "type": "directory"
-    },
-    {
       "path": "CHANGELOG.md",
       "accessCount": 2,
       "lastAccessed": 1772974242408,
-      "type": "file"
-    },
-    {
-      "path": "src/rolemesh/contracts.py",
-      "accessCount": 2,
-      "lastAccessed": 1772974525035,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_throttle.py",
-      "accessCount": 2,
-      "lastAccessed": 1772974778671,
       "type": "file"
     },
     {
@@ -340,18 +352,6 @@
       "path": "examples/quickstart/sample_config.yaml",
       "accessCount": 2,
       "lastAccessed": 1772975004578,
-      "type": "file"
-    },
-    {
-      "path": "examples/quickstart/run_demo.sh",
-      "accessCount": 2,
-      "lastAccessed": 1772975016897,
-      "type": "file"
-    },
-    {
-      "path": "tests/test_integration.py",
-      "accessCount": 2,
-      "lastAccessed": 1772975037709,
       "type": "file"
     },
     {

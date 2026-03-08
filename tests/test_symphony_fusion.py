@@ -4,7 +4,7 @@ IntentGate(_intent_gate) 동작 단위 테스트
 """
 import pytest
 from unittest.mock import MagicMock
-from symphony_fusion import SymphonyMACRS, WorkItem
+from rolemesh.routing.symphony_fusion import SymphonyMACRS, WorkItem
 
 
 @pytest.fixture

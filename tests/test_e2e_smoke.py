@@ -10,8 +10,8 @@ E2E Smoke 테스트 — 실제 임시 SQLite DB 기반
 import pytest
 from unittest.mock import MagicMock, patch
 
-from registry_client import RegistryClient
-from symphony_fusion import SymphonyMACRS, WorkItem
+from rolemesh.core.registry_client import RegistryClient
+from rolemesh.routing.symphony_fusion import SymphonyMACRS, WorkItem
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ def test_e2e_a_analysis_execute_returns_done(sf):
     )
 
     mock_amp_result = {"answer": "분석 결과: 주요 pain point 3가지", "cser": 0.9}
-    with patch("symphony_fusion.ask_amp", return_value=mock_amp_result):
+    with patch("rolemesh.routing.symphony_fusion.ask_amp", return_value=mock_amp_result):
         result = sf.execute(work_item)
 
     assert result.status == "done"
@@ -145,8 +145,8 @@ def test_e2e_b_coding_full_spec_delegate_not_blocked(sf):
     )
     work_item = WorkItem(id="e2e-b2", title="코딩-풀스펙", description=desc, kind="coding")
 
-    with patch("symphony_fusion.os.path.exists", return_value=False), \
-         patch("symphony_fusion.os.makedirs"), \
+    with patch("rolemesh.routing.symphony_fusion.os.path.exists", return_value=False), \
+         patch("rolemesh.routing.symphony_fusion.os.makedirs"), \
          patch("builtins.open", side_effect=OSError("mock")):
         # _write_contract_artifacts가 실패해도 gate 검사는 이미 통과
         packet = sf._build_pm_packet(work_item)

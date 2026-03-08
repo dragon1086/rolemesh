@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 
 # PYTHONPATH에 src가 포함되어 있다고 가정 (conftest.py 또는 pytest.ini)
-from installer import RoleMeshInstaller, Environment, RoleConfig
+from rolemesh.cli.installer import RoleMeshInstaller, Environment, RoleConfig
 
 
 # ── fixtures ──────────────────────────────────────────────────
@@ -163,7 +163,7 @@ class TestInitDatabase:
 
 class TestRegisterRoles:
     def test_registers_agents(self, installer):
-        from registry_client import RegistryClient
+        from rolemesh.core.registry_client import RegistryClient
         installer.init_database()
         roles = [
             RoleConfig(

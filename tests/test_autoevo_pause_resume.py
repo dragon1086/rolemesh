@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-import autoevo_worker as aw
+import rolemesh.workers.autoevo_worker as aw
 
 
 @pytest.fixture(autouse=True)

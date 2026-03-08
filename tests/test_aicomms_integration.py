@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rolemesh.symphony_fusion import SymphonyMACRS, WorkItem, _SF_GUARD
-from rolemesh.autoevo_worker import enqueue_round, _AUTOEVO_THROTTLE
+from rolemesh.routing.symphony_fusion import SymphonyMACRS, WorkItem, _SF_GUARD
+from rolemesh.workers.autoevo_worker import enqueue_round, _AUTOEVO_THROTTLE
 
 
 # ---------------------------------------------------------------------------
@@ -21,8 +21,8 @@ from rolemesh.autoevo_worker import enqueue_round, _AUTOEVO_THROTTLE
 @pytest.fixture(autouse=True)
 def clean_state_files(tmp_path, monkeypatch):
     """Redirect CB and throttle state files to tmp_path."""
-    monkeypatch.setattr("rolemesh.circuit_breaker._STATE_DIR", tmp_path)
-    monkeypatch.setattr("rolemesh.throttle._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.circuit_breaker._STATE_DIR", tmp_path)
+    monkeypatch.setattr("rolemesh.adapters.throttle._STATE_DIR", tmp_path)
     yield
 
 
@@ -42,7 +42,7 @@ def _analysis_item(desc="시장 분석 요청"):
 
 def test_symphony_cb_open_returns_local_rule_fallback(sf, tmp_path, monkeypatch):
     """CB OPEN 상태에서 execute() → status=fallback, proof.fallback=local_rule"""
-    import rolemesh.symphony_fusion as sf_mod
+    import rolemesh.routing.symphony_fusion as sf_mod
 
     # Force CB to report unavailable
     mock_cb = MagicMock()
@@ -64,7 +64,7 @@ def test_symphony_cb_open_returns_local_rule_fallback(sf, tmp_path, monkeypatch)
 
 def test_symphony_cb_closed_throttle_ok_calls_ask_amp(sf, monkeypatch):
     """CB CLOSED + throttle ok → ask_amp 정상 호출"""
-    import rolemesh.symphony_fusion as sf_mod
+    import rolemesh.routing.symphony_fusion as sf_mod
 
     mock_cb = MagicMock()
     mock_cb.is_available.return_value = True
@@ -90,7 +90,7 @@ def test_symphony_cb_closed_throttle_ok_calls_ask_amp(sf, monkeypatch):
 
 def test_symphony_throttle_exceeded_returns_fallback(sf, monkeypatch):
     """throttle.acquire가 두 번 모두 wait_sec 반환 → throttle_exceeded fallback"""
-    import rolemesh.symphony_fusion as sf_mod
+    import rolemesh.routing.symphony_fusion as sf_mod
 
     mock_cb = MagicMock()
     mock_cb.is_available.return_value = True
@@ -119,7 +119,7 @@ def test_symphony_throttle_exceeded_returns_fallback(sf, monkeypatch):
 
 def test_symphony_throttle_wait_then_success(sf, monkeypatch):
     """throttle 첫 번째 acquire가 wait_sec, 재시도 True → ask_amp 호출됨"""
-    import rolemesh.symphony_fusion as sf_mod
+    import rolemesh.routing.symphony_fusion as sf_mod
 
     mock_cb = MagicMock()
     mock_cb.is_available.return_value = True
@@ -149,7 +149,7 @@ def test_symphony_throttle_wait_then_success(sf, monkeypatch):
 
 def test_symphony_guard_disabled_calls_ask_amp_directly(sf, monkeypatch):
     """_SF_GUARD=False 시 CB/Throttle 체크 없이 ask_amp 바로 호출"""
-    import rolemesh.symphony_fusion as sf_mod
+    import rolemesh.routing.symphony_fusion as sf_mod
 
     monkeypatch.setattr(sf_mod, "_SF_GUARD", False)
 
@@ -168,7 +168,7 @@ def test_symphony_guard_disabled_calls_ask_amp_directly(sf, monkeypatch):
 
 def test_autoevo_throttle_ok_enqueues_tasks(tmp_path, monkeypatch):
     """throttle ok → 모든 phase_defs 태스크가 enqueue됨"""
-    import rolemesh.autoevo_worker as aw_mod
+    import rolemesh.workers.autoevo_worker as aw_mod
 
     mock_throttle = MagicMock()
     mock_throttle.acquire.return_value = True
@@ -194,7 +194,7 @@ def test_autoevo_throttle_ok_enqueues_tasks(tmp_path, monkeypatch):
 
 def test_autoevo_throttle_wait_sleep_retry_success(tmp_path, monkeypatch):
     """throttle 첫 acquire wait_sec → sleep 후 재시도 True → enqueue 호출"""
-    import rolemesh.autoevo_worker as aw_mod
+    import rolemesh.workers.autoevo_worker as aw_mod
 
     # First call returns wait, second returns True (for each task, repeat)
     call_count = {"n": 0}
@@ -228,7 +228,7 @@ def test_autoevo_throttle_wait_sleep_retry_success(tmp_path, monkeypatch):
 
 def test_autoevo_throttle_retry_fail_skips_task(tmp_path, monkeypatch):
     """throttle 두 번 모두 wait_sec → enqueue 호출 안 됨 (skip)"""
-    import rolemesh.autoevo_worker as aw_mod
+    import rolemesh.workers.autoevo_worker as aw_mod
 
     mock_throttle = MagicMock()
     mock_throttle.acquire.return_value = 99.0  # always wait
