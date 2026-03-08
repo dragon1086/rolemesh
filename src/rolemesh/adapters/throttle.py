@@ -91,6 +91,17 @@ class TokenBucketThrottle:
         state["last_refill"] = now
         return state
 
+    def wait_time(self, provider: str) -> float:
+        """Return seconds until a token is available without consuming one."""
+        capacity = self._capacity(provider)
+        state = _load_state(provider, capacity)
+        state = self._refill(state, capacity)
+        _save_state(provider, state)
+        if state["tokens"] >= 1.0:
+            return 0.0
+        rate = capacity / 60.0
+        return max(0.0, (1.0 - state["tokens"]) / rate)
+
     def acquire(self, provider: str) -> Union[bool, float]:
         """Attempt to consume one token for provider.
 

@@ -3,6 +3,8 @@ import stat
 import subprocess
 import time
 
+import pytest
+
 from rolemesh.core.quality_tracker import QualityTracker
 
 
@@ -65,6 +67,30 @@ def test_get_stats_returns_expected_shape(tmp_path):
         assert stats["average"] == 80.0
         assert stats["min"] == 70.0
         assert stats["max"] == 90.0
+        assert stats["below_threshold_ratio"] == 0.5
+    finally:
+        tracker.close()
+
+
+@pytest.mark.parametrize("score", [-1, 101, float("inf"), float("-inf")])
+def test_record_rejects_out_of_range_scores(tmp_path, score):
+    tracker = QualityTracker(db_path=str(tmp_path / "quality.db"))
+    try:
+        with pytest.raises(ValueError, match="between 0 and 100"):
+            tracker.record("batch-1", score, "openai")
+    finally:
+        tracker.close()
+
+
+def test_get_stats_recent_days_filters_below_threshold_ratio(tmp_path):
+    now = time.time()
+    tracker = QualityTracker(db_path=str(tmp_path / "quality.db"), threshold=85.0)
+    try:
+        tracker.record("old-low", 10, "openai", timestamp=now - (10 * 24 * 60 * 60))
+        tracker.record("recent-low", 80, "openai", timestamp=now - 60)
+        tracker.record("recent-high", 90, "openai", timestamp=now - 30)
+        stats = tracker.get_stats(recent_days=7)
+        assert stats["count"] == 2
         assert stats["below_threshold_ratio"] == 0.5
     finally:
         tracker.close()

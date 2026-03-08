@@ -6,7 +6,13 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+    SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$SCRIPT_DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Python 경로 자동 탐색 (venv 우선)
@@ -17,6 +23,13 @@ elif [[ -f "$REPO_ROOT/venv/bin/python3" ]]; then
 else
     PYTHON="python3"
 fi
+
+notify_selection_failure() {
+    local message="$1"
+    if command -v openclaw >/dev/null 2>&1; then
+        openclaw system event --text "$message" --mode now >/dev/null 2>&1 || true
+    fi
+}
 
 if [[ $# -ne 3 || "${1:-}" != "-C" ]]; then
     echo "사용법: $0 -C /path/to/project 'prompt'" >&2
@@ -55,6 +68,7 @@ print(router.get_available_provider() or '')
 ")
 
     if [[ -z "$PROVIDER" ]]; then
+        notify_selection_failure "[smart-delegate] provider selection failed: no available provider for $WORKDIR"
         break
     fi
 
@@ -116,4 +130,5 @@ echo "[smart-delegate] ❌ 모든 fallback 시도 실패" >&2
 if [[ -n "$LAST_PROVIDER" ]]; then
     echo "[smart-delegate] 마지막 provider: $LAST_PROVIDER (exit=$LAST_EXIT)" >&2
 fi
+notify_selection_failure "[smart-delegate] all fallback attempts failed for $WORKDIR (last_provider=${LAST_PROVIDER:-none}, exit=$LAST_EXIT)"
 exit 1

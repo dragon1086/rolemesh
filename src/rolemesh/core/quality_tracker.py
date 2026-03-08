@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+from math import isfinite
 
 from .init_db import DEFAULT_DB_PATH, init_db
 
@@ -33,6 +34,9 @@ class QualityTracker:
         provider: str,
         timestamp: float | None = None,
     ) -> None:
+        score_value = float(score)
+        if not isfinite(score_value) or not 0.0 <= score_value <= 100.0:
+            raise ValueError("score must be a finite value between 0 and 100")
         conn = self._conn_ctx()
         conn.execute(
             """
@@ -41,7 +45,7 @@ class QualityTracker:
             """,
             (
                 batch_id,
-                float(score),
+                score_value,
                 provider or "unknown",
                 float(time.time() if timestamp is None else timestamp),
             ),

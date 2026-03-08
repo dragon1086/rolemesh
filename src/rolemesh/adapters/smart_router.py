@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .circuit_breaker import CBState, ProviderCircuitBreaker
-from .throttle import TokenBucketThrottle, _load_state
+from .throttle import TokenBucketThrottle
 
 DEFAULT_PROVIDERS = ["anthropic", "openai-codex", "gemini"]
 _DELEGATE_SCRIPTS = {
@@ -34,13 +34,12 @@ class SmartRouter:
         )
 
     def _throttle_available(self, provider: str) -> bool:
-        capacity = self.throttle._capacity(provider)
-        state = _load_state(provider, capacity)
-        state = self.throttle._refill(state, capacity)
-        return float(state["tokens"]) >= 1.0
+        return self.throttle.wait_time(provider) <= 0.0
 
     def get_available_provider(self, task_type: str = "code") -> str | None:  # noqa: ARG002
         """Return the first provider that is not OPEN and has throttle capacity."""
+        if not self.providers:
+            return None
         for provider in self.providers:
             if self.cb.get_state(provider) == CBState.OPEN:
                 continue

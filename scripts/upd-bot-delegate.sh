@@ -8,7 +8,13 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+    SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$SCRIPT_DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROVIDER="gemini"
 AGENT_NAME="upd-bot"
@@ -68,7 +74,7 @@ CB_RESULT=$("$PYTHON" -c "
 import sys
 sys.path.insert(0, '$REPO_ROOT/src')
 try:
-    from rolemesh.circuit_breaker import ProviderCircuitBreaker, CBState
+    from rolemesh.adapters.circuit_breaker import ProviderCircuitBreaker, CBState
     cb = ProviderCircuitBreaker()
     state = cb.get_state('$PROVIDER')
     remaining = cb.cooldown_remaining('$PROVIDER')
@@ -97,7 +103,7 @@ THROTTLE_RESULT=$("$PYTHON" -c "
 import sys
 sys.path.insert(0, '$REPO_ROOT/src')
 try:
-    from rolemesh.throttle import TokenBucketThrottle
+    from rolemesh.adapters.throttle import TokenBucketThrottle
     t = TokenBucketThrottle()
     result = t.acquire('$PROVIDER')
     if result is True:

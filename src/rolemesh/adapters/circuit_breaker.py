@@ -27,17 +27,21 @@ def _state_file(provider: str) -> Path:
     return _STATE_DIR / f"{_STATE_PREFIX}{provider}.json"
 
 
-def _load(provider: str) -> dict:
+def _default_state(cooldown_sec: int = 60) -> dict:
+    return {
+        "state": CBState.CLOSED.value,
+        "failures": 0,
+        "opened_at": 0,
+        "cooldown_sec": cooldown_sec,
+    }
+
+
+def _load(provider: str) -> tuple[dict, bool]:
     try:
         with _state_file(provider).open("r", encoding="utf-8") as f:
-            return json.load(f)
+            return json.load(f), False
     except Exception:
-        return {
-            "state": CBState.CLOSED,
-            "failures": 0,
-            "opened_at": 0,
-            "cooldown_sec": 60,
-        }
+        return _default_state(), True
 
 
 def _save(provider: str, data: dict) -> None:
@@ -69,12 +73,19 @@ class ProviderCircuitBreaker:
     # ------------------------------------------------------------------
 
     def _get(self, provider: str) -> dict:
-        data = _load(provider)
-        # Ensure defaults for older state files
-        data.setdefault("state", CBState.CLOSED)
-        data.setdefault("failures", 0)
-        data.setdefault("opened_at", 0)
-        data.setdefault("cooldown_sec", self.cooldown_sec)
+        data, recovered = _load(provider)
+        normalized = _default_state(self.cooldown_sec)
+        if not recovered:
+            try:
+                normalized["state"] = CBState(str(data.get("state", CBState.CLOSED.value))).value
+                normalized["failures"] = max(0, int(data.get("failures", 0)))
+                normalized["opened_at"] = max(0, int(data.get("opened_at", 0)))
+                normalized["cooldown_sec"] = max(0, int(data.get("cooldown_sec", self.cooldown_sec)))
+            except (TypeError, ValueError):
+                recovered = True
+        data = normalized
+        if recovered:
+            self._put(provider, data)
         return data
 
     def _put(self, provider: str, data: dict) -> None:

@@ -229,3 +229,14 @@ def test_reset_forces_closed(cb):
     cb.reset("gemini")
     assert cb.get_state("gemini") == CBState.CLOSED
     assert cb.is_available("gemini") is True
+
+
+def test_corrupted_state_file_recovers_to_closed(tmp_path):
+    state_file = tmp_path / "rolemesh-cb-anthropic.json"
+    state_file.write_text("{not-json", encoding="utf-8")
+    cb = ProviderCircuitBreaker(failure_threshold=3, cooldown_sec=45)
+
+    assert cb.get_state("anthropic") == CBState.CLOSED
+    recovered = state_file.read_text(encoding="utf-8")
+    assert '"state": "CLOSED"' in recovered
+    assert '"cooldown_sec": 45' in recovered

@@ -55,6 +55,18 @@ def test_all_providers_open_returns_none(isolate_state):
     assert router.get_available_provider() is None
 
 
+def test_empty_provider_list_returns_none(isolate_state):
+    router = SmartRouter(providers=[])
+    assert router.get_available_provider() is None
+
+
+def test_throttle_check_does_not_consume_token(isolate_state):
+    throttle = TokenBucketThrottle(rpm_overrides={"anthropic": 1})
+    router = SmartRouter(providers=["anthropic"], throttle=throttle)
+    assert router.get_available_provider() == "anthropic"
+    assert throttle.acquire("anthropic") is True
+
+
 @pytest.mark.parametrize(
     ("provider", "expected"),
     [
