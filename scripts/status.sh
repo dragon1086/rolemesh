@@ -4,11 +4,20 @@ set -euo pipefail
 
 DB="${HOME}/ai-comms/registry.db"
 REQUIRED_CMDS=(sqlite3 python3 ps awk grep date)
+MISSING_CMDS=()
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+have_table() {
+  local table="$1"
+  sqlite3 "$DB" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='${table}' LIMIT 1;" 2>/dev/null | grep -q '^1$'
+}
 
 for cmd in "${REQUIRED_CMDS[@]}"; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "[status] 필수 커맨드 없음: $cmd"
-    exit 1
+  if ! have_cmd "$cmd"; then
+    MISSING_CMDS+=("$cmd")
   fi
 done
 
@@ -20,34 +29,63 @@ fi
 echo "=== RoleMesh Queue Status ($(date '+%Y-%m-%d %H:%M:%S')) ==="
 echo ""
 
+if [[ ${#MISSING_CMDS[@]} -gt 0 ]]; then
+  echo "[status] 일부 명령 누락: ${MISSING_CMDS[*]}"
+  echo "[status] 가능한 섹션만 표시합니다."
+  echo ""
+fi
+
 echo "--- Task Queue ---"
-sqlite3 -column -header "$DB" \
-  "SELECT status, COUNT(*) AS count FROM task_queue GROUP BY status ORDER BY status;"
+if have_cmd sqlite3 && have_table task_queue; then
+  sqlite3 -column -header "$DB" \
+    "SELECT status, COUNT(*) AS count FROM task_queue GROUP BY status ORDER BY status;"
+else
+  echo "(task_queue 조회 불가: sqlite3 또는 테이블 없음)"
+fi
 
 echo ""
 echo "--- Dead Letter Queue ---"
-DLQ=$(sqlite3 "$DB" "SELECT COUNT(*) FROM dead_letter;")
-echo "dlq_count: $DLQ"
+if have_cmd sqlite3 && have_table dead_letter; then
+  DLQ=$(sqlite3 "$DB" "SELECT COUNT(*) FROM dead_letter;")
+  echo "dlq_count: $DLQ"
+else
+  echo "dlq_count: N/A (dead_letter 테이블 없음)"
+fi
 
 echo ""
 echo "--- Recent DLQ Entries (최근 5개) ---"
-sqlite3 -column -header "$DB" \
-  "SELECT task_id, title, retry_count, substr(error,1,60) AS error, datetime(dlq_at,'unixepoch','localtime') AS dlq_at FROM dead_letter ORDER BY dlq_at DESC LIMIT 5;" 2>/dev/null || true
+if have_cmd sqlite3 && have_table dead_letter; then
+  sqlite3 -column -header "$DB" \
+    "SELECT task_id, title, retry_count, substr(error,1,60) AS error, datetime(dlq_at,'unixepoch','localtime') AS dlq_at FROM dead_letter ORDER BY dlq_at DESC LIMIT 5;" 2>/dev/null || true
+else
+  echo "(표시할 dead_letter 항목 없음)"
+fi
 
 echo ""
 echo "--- Running Workers ---"
-ps aux | grep -E "rolemesh(\.workers)?\.(queue_worker|message_worker|autoevo_worker)" | grep -v grep \
-  | awk '{print $2, $11, $12}' \
-  || echo "(실행 중인 워커 없음)"
+if have_cmd ps && have_cmd grep && have_cmd awk; then
+  ps aux | grep -E "rolemesh(\.workers)?\.(queue_worker|message_worker|autoevo_worker)" | grep -v grep \
+    | awk '{print $2, $11, $12}' \
+    || echo "(실행 중인 워커 없음)"
+else
+  echo "(워커 프로세스 조회 불가: ps/grep/awk 필요)"
+fi
 
 for module in rolemesh.workers.queue_worker rolemesh.workers.message_worker rolemesh.workers.autoevo_worker; do
-  python3 -c "import importlib; importlib.import_module('${module}')" >/dev/null 2>&1 \
-    || echo "  module import failed: ${module}"
+  if have_cmd python3; then
+    PYTHONPATH="${PWD}/src${PYTHONPATH:+:${PYTHONPATH}}" \
+      python3 -c "import importlib; importlib.import_module('${module}')" >/dev/null 2>&1 \
+      || echo "  module import failed: ${module}"
+  else
+    echo "  module import skipped: python3 없음"
+    break
+  fi
 done
 
 echo ""
 echo "--- Batch Cooldown Status ---"
-python3 -c "
+if have_cmd python3; then
+  PYTHONPATH="${PWD}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -c "
 import json, time, sys
 STATE_FILE = '/tmp/rolemesh-batch-cooldown.json'
 COOLDOWN_SEC = 120.0
@@ -73,6 +111,9 @@ except FileNotFoundError:
 except Exception as e:
     print(f'  배치 쿨다운: ERROR ({e})')
 " 2>&1
+else
+  echo "  배치 쿨다운: 확인 불가 (python3 없음)"
+fi
 
 echo ""
 echo "--- Provider Circuit Breaker Status ---"
@@ -82,7 +123,11 @@ for provider in anthropic openai gemini; do
     echo "  ${provider}: CLOSED (no state file)"
     continue
   fi
-  STATE=$(python3 -c "
+  if ! have_cmd python3; then
+    echo "  ${provider}: 확인 불가 (python3 없음)"
+    continue
+  fi
+  STATE=$(PYTHONPATH="${PWD}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -c "
 import json, time, sys
 try:
     d = json.load(open('${STATE_FILE}'))

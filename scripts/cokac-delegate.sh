@@ -20,6 +20,7 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DELEGATE="$SCRIPT_DIR/claude-delegate.sh"
+export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # Python 경로 자동 탐색 (venv 우선)
 if [[ -f "$REPO_ROOT/.venv/bin/python3" ]]; then
@@ -51,8 +52,6 @@ echo "[cokac-delegate] 인수: $*" >&2
 
 # ── 1. Batch Cooldown 체크 ────────────────────────────────────────────────────
 COOLDOWN_RESULT=$("$PYTHON" -c "
-import sys
-sys.path.insert(0, '$REPO_ROOT/src')
 try:
     from rolemesh.adapters.batch_cooldown import BatchCooldown
     bc = BatchCooldown()
@@ -84,8 +83,6 @@ DELEGATE_EXIT=0
 
 # ── 3. 배치 완료 시간 기록 ────────────────────────────────────────────────────
 "$PYTHON" -c "
-import sys
-sys.path.insert(0, '$REPO_ROOT/src')
 try:
     from rolemesh.adapters.batch_cooldown import BatchCooldown
     BatchCooldown().record_complete()

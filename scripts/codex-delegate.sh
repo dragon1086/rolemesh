@@ -17,6 +17,7 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROVIDER="openai-codex"
+export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # Python 경로 자동 탐색 (venv 우선)
 if [[ -f "$REPO_ROOT/.venv/bin/python3" ]]; then
@@ -52,8 +53,6 @@ echo "[codex-delegate] workdir: $WORKDIR" >&2
 
 # ── 1. Batch Cooldown 체크 ────────────────────────────────────────────────────
 COOLDOWN_RESULT=$("$PYTHON" -c "
-import sys
-sys.path.insert(0, '$REPO_ROOT/src')
 try:
     from rolemesh.adapters.batch_cooldown import BatchCooldown
     bc = BatchCooldown()
@@ -81,8 +80,6 @@ fi
 
 # ── 2. Circuit Breaker 체크 ───────────────────────────────────────────────────
 CB_RESULT=$("$PYTHON" -c "
-import sys
-sys.path.insert(0, '$REPO_ROOT/src')
 try:
     from rolemesh.adapters.circuit_breaker import ProviderCircuitBreaker, CBState
     cb = ProviderCircuitBreaker()
@@ -110,8 +107,6 @@ fi
 
 # ── 3. Throttle 체크 ─────────────────────────────────────────────────────────
 THROTTLE_RESULT=$("$PYTHON" -c "
-import sys
-sys.path.insert(0, '$REPO_ROOT/src')
 try:
     from rolemesh.adapters.throttle import TokenBucketThrottle
     t = TokenBucketThrottle()
@@ -144,8 +139,6 @@ codex exec -s danger-full-access --model gpt-5.4 -C "$WORKDIR" "$PROMPT" || DELE
 
 # ── 5. 배치 완료 시간 기록 ───────────────────────────────────────────────────
 "$PYTHON" -c "
-import sys
-sys.path.insert(0, '$REPO_ROOT/src')
 try:
     from rolemesh.adapters.batch_cooldown import BatchCooldown
     BatchCooldown().record_complete()
