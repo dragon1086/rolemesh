@@ -1,0 +1,9 @@
+# throttle.yaml — Provider RPM limits for RoleMesh delegation
+# 분당 요청 수 상한. Rate limit 여유 확보를 위해 공식 한도보다 낮게 설정.
+#
+# 이 파일을 수정하면 claude-delegate.sh / cokac-delegate.sh가 자동으로 반영.
+# 재시작 불필요 (매 호출마다 읽음).
+
+anthropic: 15   # Anthropic API — 실제 한도 여유 확보 (rate limit 방지)
+openai: 20      # OpenAI API
+gemini: 60      # Google Gemini API
