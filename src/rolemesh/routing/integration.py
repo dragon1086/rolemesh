@@ -7,12 +7,14 @@ integration.py — RoleMesh Integration Manager
     from rolemesh.integration import IntegrationManager
     mgr = IntegrationManager()
     mgr.add("mybot", role="builder", endpoint="http://localhost:8080",
+            cmd="mybot -p", provider="openai",
             capabilities=["build", "deploy"])
     mgr.list()
     mgr.remove("mybot")
 """
 
 import os
+import stat
 from typing import Optional
 
 from ..core.registry_client import RegistryClient
@@ -55,6 +57,9 @@ class IntegrationManager:
         endpoint: str,
         capabilities: list[str] | None = None,
         allow_update: bool = False,
+        cmd: str = "",
+        provider: str = "",
+        auto_script: bool = False,
     ) -> dict:
         """에이전트를 레지스트리에 등록한다.
 
@@ -70,22 +75,32 @@ class IntegrationManager:
             능력 이름 목록. 각 항목이 capability로 등록됨.
         allow_update : bool
             True면 이미 존재해도 업데이트. False(기본)면 중복 시 예외.
+        cmd : str
+            실행 명령 (예: "gemini -p", "amp --task"). auto_script=True 시 필수.
+        provider : str
+            Throttle/CB에서 사용할 provider 이름 (예: "gemini", "openai", "anthropic").
+        auto_script : bool
+            True면 등록 후 {name}-delegate.sh를 자동 생성. 기본 False.
 
         Returns
         -------
         dict
-            등록된 통합 정보
+            등록된 통합 정보. script_path 키가 추가될 수 있음.
 
         Raises
         ------
         DuplicateIntegrationError
             allow_update=False 상태에서 동일 name이 이미 존재할 때
+        ValueError
+            cmd가 빈 문자열이고 auto_script=True일 때
         """
         name = name.strip()
         if not name:
             raise ValueError("name은 비어 있을 수 없습니다.")
         if not endpoint:
             raise ValueError("endpoint는 비어 있을 수 없습니다.")
+        if auto_script and not cmd.strip():
+            raise ValueError("auto_script=True일 때 cmd는 비어 있을 수 없습니다.")
 
         existing = self._find(name)
         if existing and not allow_update:
@@ -112,12 +127,76 @@ class IntegrationManager:
                     keywords=[cap],
                 )
 
-        return {
+        result: dict = {
             "name": name,
             "role": role,
             "endpoint": endpoint,
             "capabilities": caps,
         }
+
+        if auto_script:
+            script_path = self.generate_delegate_script(
+                name=name,
+                cmd=cmd.strip(),
+                provider=provider.strip() or name,
+            )
+            result["script_path"] = script_path
+
+        return result
+
+    def generate_delegate_script(
+        self,
+        name: str,
+        cmd: str,
+        provider: str,
+        scripts_dir: Optional[str] = None,
+        template_path: Optional[str] = None,
+    ) -> str:
+        """{name}-delegate.sh 스크립트를 자동 생성한다.
+
+        Parameters
+        ----------
+        name : str
+            에이전트 이름 (파일명: {name}-delegate.sh)
+        cmd : str
+            실행 명령 (예: "gemini -p")
+        provider : str
+            Throttle/CB provider 이름
+        scripts_dir : str, optional
+            출력 디렉터리. 기본: scripts/
+        template_path : str, optional
+            템플릿 파일 경로. 기본: scripts/templates/delegate.sh.tmpl
+
+        Returns
+        -------
+        str
+            생성된 스크립트 절대 경로
+        """
+        if not cmd.strip():
+            raise ValueError("cmd는 비어 있을 수 없습니다.")
+
+        tmpl_path = template_path or os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts", "templates", "delegate.sh.tmpl")
+        )
+        with open(tmpl_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        content = content.replace("{{NAME}}", name).replace("{{CMD}}", cmd).replace("{{PROVIDER}}", provider)
+
+        out_dir = scripts_dir or os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts")
+        )
+        os.makedirs(out_dir, exist_ok=True)
+        script_path = os.path.join(out_dir, f"{name}-delegate.sh")
+
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # chmod +x
+        current = os.stat(script_path).st_mode
+        os.chmod(script_path, current | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+        return os.path.abspath(script_path)
 
     def list(self) -> list[dict]:
         """등록된 모든 통합 목록을 반환한다.

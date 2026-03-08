@@ -137,31 +137,41 @@ def _cmd_integration(args: list[str]) -> None:
 
 
 def _integration_add(mgr, args: list[str]) -> None:
-    """integration add --name X --role Y --endpoint Z [--capabilities a,b,c]"""
+    """integration add --name X --role Y --endpoint Z [--cmd CMD] [--provider P] [--no-auto-script]"""
     import argparse
     parser = argparse.ArgumentParser(prog="rolemesh integration add", add_help=False)
     parser.add_argument("--name", required=True, help="에이전트 이름")
     parser.add_argument("--role", required=True, help="역할 (예: builder, analyzer)")
-    parser.add_argument("--endpoint", required=True, help="HTTP 엔드포인트 또는 IPC 경로")
+    parser.add_argument("--endpoint", default="", help="HTTP 엔드포인트 또는 IPC 경로")
     parser.add_argument("--capabilities", default="", help="능력 목록 (쉼표 구분, 예: build,deploy)")
     parser.add_argument("--update", action="store_true", help="이미 있으면 업데이트")
+    parser.add_argument("--cmd", default="", help="실행 명령 (예: 'gemini -p', 'amp --task')")
+    parser.add_argument("--provider", default="", help="Throttle/CB provider 이름 (예: gemini, openai, anthropic)")
+    parser.add_argument("--no-auto-script", action="store_true", help="delegate.sh 자동 생성 비활성화")
     parsed = parser.parse_args(args)
 
     caps = [c.strip() for c in parsed.capabilities.split(",") if c.strip()] if parsed.capabilities else []
+    auto_script = not parsed.no_auto_script
+    endpoint = parsed.endpoint or f"local://{parsed.name}"
 
     from ..routing.integration import DuplicateIntegrationError
     try:
         info = mgr.add(
             name=parsed.name,
             role=parsed.role,
-            endpoint=parsed.endpoint,
+            endpoint=endpoint,
             capabilities=caps,
             allow_update=parsed.update,
+            cmd=parsed.cmd,
+            provider=parsed.provider,
+            auto_script=auto_script,
         )
         print(f"[integration] 등록 완료: {info['name']} (role={info['role']}, endpoint={info['endpoint']})")
         if info["capabilities"]:
             print(f"  capabilities: {', '.join(info['capabilities'])}")
-    except DuplicateIntegrationError as e:
+        if "script_path" in info:
+            print(f"  delegate script: {info['script_path']}")
+    except (DuplicateIntegrationError, ValueError) as e:
         print(f"오류: {e}")
         sys.exit(1)
 
