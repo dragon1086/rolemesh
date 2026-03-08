@@ -4,6 +4,7 @@
 
 기본 빌더 경로는 `scripts/cokac-delegate.sh`이며,
 Anthropic rate limit 상황에서는 `scripts/codex-delegate.sh` fallback을 권장한다.
+자동 fallback까지 포함한 기본 진입점은 `scripts/smart-delegate.sh`다.
 
 빌더 옵션:
 - `cokac` (Claude Code): 기본 빌더 (Anthropic)
@@ -14,6 +15,13 @@ Anthropic rate limit 상황에서는 `scripts/codex-delegate.sh` fallback을 권
 ## 위임 경로
 
 ```
+록이(PM)
+  └─▶ scripts/smart-delegate.sh   ← 권장 스마트 진입점
+        ├─ SmartRouter(provider 우선순위: anthropic → openai-codex → gemini)
+        ├─ CB OPEN / throttle 소진 provider 자동 스킵
+        ├─ delegate 실행 실패 시 다음 provider로 최대 2회 fallback
+        └─▶ 선택된 delegate.sh 실행
+
 록이(PM)
   └─▶ scripts/cokac-delegate.sh   ← PM이 호출하는 진입점
         └─▶ scripts/claude-delegate.sh  ← CB/Throttle 체크
@@ -36,6 +44,9 @@ Anthropic rate limit 상황에서는 `scripts/codex-delegate.sh` fallback을 권
 ```bash
 # 기본 위임
 scripts/cokac-delegate.sh -p "버그 수정해줘"
+
+# 스마트 fallback 위임 (권장)
+scripts/smart-delegate.sh -C /path/to/project "버그 수정해줘"
 
 # 모델 지정
 scripts/cokac-delegate.sh --model claude-opus-4-5 -p "복잡한 리팩토링"
@@ -103,6 +114,7 @@ PM이 직접 `claude -p`로 위임하는 경로에는 보호장치가 없었다.
 이 프로토콜로:
 - **Throttle**: 분당 요청 수를 15회로 제한해 rate limit 여유 확보
 - **Circuit Breaker**: 연속 실패 시 자동 차단 → 불필요한 API 호출 방지
+- **Smart fallback router**: Anthropic 차단/소진 시 Codex, 이후 Gemini로 자동 전환
 - **위임 로그**: 타임스탬프 포함 위임 이력 stderr 기록
 
 ---
@@ -113,5 +125,6 @@ PM이 직접 `claude -p`로 위임하는 경로에는 보호장치가 없었다.
 |------|------|
 | CB OPEN | exit 1, 남은 시간 출력 |
 | Throttle wait 필요 | sleep 후 자동 실행 |
+| smart-delegate 1차 실패 | 다음 provider로 자동 fallback (최대 2회) |
 | CB/Throttle 체크 실패 (Python 오류) | 경고 출력 후 claude 그대로 실행 |
 | claude 실행 실패 | claude 종료 코드 그대로 전파 |
