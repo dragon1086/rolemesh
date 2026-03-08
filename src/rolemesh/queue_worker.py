@@ -111,7 +111,8 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
 def run_loop() -> None:
     client = RegistryClient()
     orchestrator = SymphonyMACRS(registry=client)
-    print(f"[worker] 시작 (PID={os.getpid()}, poll={POLL_INTERVAL}s)")
+    # 시작 로그는 stderr로 (사용자 채널 차단, 디버그용 유지)
+    print(f"[worker] 시작 (PID={os.getpid()}, poll={POLL_INTERVAL}s)", file=sys.stderr)
 
     while True:
         task = client.dequeue_next()
