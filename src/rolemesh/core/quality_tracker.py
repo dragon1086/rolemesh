@@ -1,30 +1,34 @@
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import time
 from math import isfinite
 
-from .init_db import DEFAULT_DB_PATH, init_db
+from .init_db import DEFAULT_DB_PATH, get_shared_connection, release_shared_connection
+
+logger = logging.getLogger(__name__)
 
 
 class QualityTracker:
     def __init__(self, db_path: str = DEFAULT_DB_PATH, threshold: float = 85.0):
         self.db_path = os.path.expanduser(db_path)
         self.threshold = float(threshold)
-        self._conn = init_db(self.db_path)
+        self._conn = get_shared_connection(self.db_path)
 
     def close(self) -> None:
-        try:
-            self._conn.close()
-        except Exception:
-            pass
+        release_shared_connection(self._conn, self.db_path)
+        self._conn = None
 
     def _conn_ctx(self) -> sqlite3.Connection:
         try:
+            if self._conn is None:
+                raise sqlite3.ProgrammingError("connection is closed")
             self._conn.execute("SELECT 1")
-        except sqlite3.ProgrammingError:
-            self._conn = init_db(self.db_path)
+        except sqlite3.Error:
+            logger.debug("Reopening shared quality DB connection for %s", self.db_path)
+            self._conn = get_shared_connection(self.db_path)
         return self._conn
 
     def record(

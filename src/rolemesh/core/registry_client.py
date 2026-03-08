@@ -17,6 +17,7 @@ Multi-Agent Capability Registry System
 """
 
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -24,16 +25,16 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
-from .init_db import init_db
+from .init_db import get_shared_connection, release_shared_connection
 
 DEFAULT_DB_PATH = os.path.expanduser("~/ai-comms/registry.db")
 ROUTING_LOG_PATH = os.path.expanduser("~/ai-comms/routing_log.jsonl")
 DEFAULT_DLQ_MAX_ITEMS = 500
+logger = logging.getLogger(__name__)
 
 
-def _get_openai_api_key() -> Optional[str]:
+def _get_openai_api_key() -> str | None:
     """~/.zshrc 또는 환경변수에서 OPENAI_API_KEY 읽기"""
     key = os.environ.get("OPENAI_API_KEY")
     if key:
@@ -105,7 +106,7 @@ class AgentMatch:
     agent_id: str
     capability: str
     description: str
-    endpoint: Optional[str]
+    endpoint: str | None
     score: float          # 0.0~1.0 (LLM 또는 키워드 매칭 + 실적 가중)
     cost_level: str
     routing_explanation: str = ""   # 라우팅 선택 이유 (투명성)
@@ -136,16 +137,19 @@ class RegistryClient:
 
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self.db_path = db_path
-        self._conn = init_db(db_path)
+        self._conn = get_shared_connection(db_path)
         self._openai_api_key = _get_openai_api_key()
         self._dlq_max_items = DEFAULT_DLQ_MAX_ITEMS
 
     def _conn_ctx(self) -> sqlite3.Connection:
         """연결이 살아있는지 확인 후 반환"""
         try:
+            if self._conn is None:
+                raise sqlite3.ProgrammingError("connection is closed")
             self._conn.execute("SELECT 1")
-        except sqlite3.ProgrammingError:
-            self._conn = init_db(self.db_path)
+        except sqlite3.Error:
+            logger.debug("Reopening shared registry DB connection for %s", self.db_path)
+            self._conn = get_shared_connection(self.db_path)
         return self._conn
 
     # ── 에이전트 관리 ────────────────────────────────────────────
@@ -170,7 +174,7 @@ class RegistryClient:
                 status         = 'active'
         """, (agent_id, display_name, description, endpoint, int(time.time())))
         conn.commit()
-        print(f"[registry] 에이전트 등록: {agent_id}")
+        logger.info("registry agent registered: %s", agent_id)
 
     def heartbeat(self, agent_id: str) -> None:
         """에이전트 생존 신호 (1분마다 호출 권장)"""
@@ -208,7 +212,7 @@ class RegistryClient:
         agent_id: str,
         name: str,
         description: str = "",
-        keywords: list[str] = None,
+        keywords: list[str] | None = None,
         cost_level: str = "medium",
         avg_latency_ms: int = 0,
     ) -> None:
@@ -224,13 +228,13 @@ class RegistryClient:
             VALUES (?, ?, ?, ?, ?, ?)
         """, (agent_id, name, description, keywords_json, cost_level, avg_latency_ms))
         conn.commit()
-        print(f"[registry] 능력 등록: {agent_id} → {name}")
+        logger.info("registry capability registered: %s -> %s", agent_id, name)
 
     # ── LLM 라우팅 (내부) ────────────────────────────────────────
 
     def _llm_route(
         self, task_text: str, caps: list[dict]
-    ) -> tuple[Optional[str], Optional[str], str]:
+    ) -> tuple[str | None, str | None, str]:
         """GPT-4o-mini로 태스크 라우팅.
 
         Returns:
@@ -340,8 +344,8 @@ class RegistryClient:
         try:
             with open(ROUTING_LOG_PATH, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except Exception as e:
-            print(f"[registry] routing_log 파일 기록 실패: {e}")
+        except Exception:
+            logger.exception("routing_log file write failed")
 
         # DB 기록
         try:
@@ -356,8 +360,8 @@ class RegistryClient:
                 chosen_capability, explanation, score, routing_method,
             ))
             conn.commit()
-        except Exception as e:
-            print(f"[registry] routing_log DB 기록 실패: {e}")
+        except Exception:
+            logger.exception("routing_log DB write failed")
 
     # ── 태스크 라우팅 ────────────────────────────────────────────
 
@@ -733,7 +737,8 @@ class RegistryClient:
 
     def close(self) -> None:
         """DB 연결 종료"""
-        self._conn.close()
+        release_shared_connection(self._conn, self.db_path)
+        self._conn = None
 
     # ── 태스크 큐 ────────────────────────────────────────────────
 
@@ -741,7 +746,7 @@ class RegistryClient:
         self,
         title: str,
         description: str = "",
-        kind: str = None,
+        kind: str | None = None,
         priority: int = 5,
         source: str = "manual",
     ) -> str:
@@ -779,7 +784,7 @@ class RegistryClient:
         ).fetchall()
         for r in rows:
             if _normalize_task_title(r["title"]) == norm_title:
-                print(f"[queue] deduped: reuse {r['id']} — {title}")
+                logger.info("queue deduped: reuse %s - %s", r["id"], title)
                 return r["id"]
 
         task_id = str(uuid.uuid4())
@@ -788,7 +793,7 @@ class RegistryClient:
             VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
         """, (task_id, title, desc, kind, priority, source, time.time()))
         conn.commit()
-        print(f"[queue] enqueued: {task_id} — {title}")
+        logger.info("queue enqueued: %s - %s", task_id, title)
         return task_id
 
     def dequeue_next(self) -> dict | None:
@@ -836,7 +841,7 @@ class RegistryClient:
         if dlq_row is not None:
             conn.execute("DELETE FROM dead_letter WHERE task_id = ?", (task_id,))
         conn.commit()
-        print(f"[queue] retry #{retry_count} in {delay_sec}s: {task_id}")
+        logger.info("queue retry #%s in %ss: %s", retry_count, delay_sec, task_id)
 
     def move_to_dlq(self, task_id: str, reason: str = "") -> None:
         """retry 소진 태스크를 dead_letter 테이블로 이동."""
@@ -875,7 +880,7 @@ class RegistryClient:
                 (self._dlq_max_items,),
             )
         conn.commit()
-        print(f"[queue] DLQ: {task_id}")
+        logger.info("queue DLQ: %s", task_id)
 
     def queue_counts(self) -> dict:
         """태스크 상태별 카운트 + DLQ 카운트 반환."""
@@ -888,7 +893,13 @@ class RegistryClient:
         counts["dlq"] = dlq_row["cnt"] if dlq_row else 0
         return counts
 
-    def complete_task(self, task_id: str, summary: str = "", error: str = None, status: str = None) -> None:
+    def complete_task(
+        self,
+        task_id: str,
+        summary: str = "",
+        error: str | None = None,
+        status: str | None = None,
+    ) -> None:
         """태스크 완료(done), 실패(failed), 또는 커스텀 상태 처리."""
         if status is None:
             status = "failed" if error else "done"
@@ -899,9 +910,9 @@ class RegistryClient:
             WHERE id = ?
         """, (status, summary, error, time.time(), task_id))
         conn.commit()
-        print(f"[queue] {status}: {task_id}")
+        logger.info("queue %s: %s", status, task_id)
 
-    def list_tasks(self, status: str = None, limit: int = 20) -> list[dict]:
+    def list_tasks(self, status: str | None = None, limit: int = 20) -> list[dict]:
         """태스크 목록 반환. status 미지정 시 전체."""
         conn = self._conn_ctx()
         if status:

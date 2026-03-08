@@ -7,10 +7,10 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class CBState(str, Enum):
@@ -46,8 +46,14 @@ def _load(provider: str) -> tuple[dict, bool]:
 
 def _save(provider: str, data: dict) -> None:
     try:
-        with _state_file(provider).open("w", encoding="utf-8") as f:
+        path = _state_file(provider)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
     except Exception:
         pass
 

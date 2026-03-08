@@ -1,3 +1,9 @@
+import os
+import logging
+import sqlite3
+import threading
+from dataclasses import dataclass
+
 """
 init_db.py — MACRS SQLite 스키마 초기화
 Multi-Agent Capability Registry System
@@ -5,20 +11,95 @@ Multi-Agent Capability Registry System
 실행: python ~/ai-comms/init_db.py
 """
 
-import sqlite3
-import os
-
 # 기본 DB 경로
 DEFAULT_DB_PATH = os.path.expanduser("~/ai-comms/registry.db")
+logger = logging.getLogger(__name__)
+_POOL_LOCK = threading.RLock()
+
+
+@dataclass
+class _SharedConnection:
+    conn: sqlite3.Connection
+    refcount: int = 0
+
+
+_SHARED_CONNECTIONS: dict[tuple[int, str], _SharedConnection] = {}
+
+
+def _normalize_db_path(db_path: str) -> str:
+    return os.path.abspath(os.path.expanduser(db_path))
+
+
+def _open_connection(db_path: str) -> sqlite3.Connection:
+    db_dir = os.path.dirname(db_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 30000")
+    _create_tables(conn)
+    _migrate_tables(conn)
+    return conn
 
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     """DB 연결 후 스키마 초기화. 테이블이 이미 있으면 스킵."""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    _create_tables(conn)
-    _migrate_tables(conn)
-    return conn
+    return _open_connection(_normalize_db_path(db_path))
+
+
+def get_shared_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+    """현재 스레드에서 재사용할 공유 SQLite 연결을 반환한다."""
+    normalized_path = _normalize_db_path(db_path)
+    key = (threading.get_ident(), normalized_path)
+
+    with _POOL_LOCK:
+        entry = _SHARED_CONNECTIONS.get(key)
+        if entry is not None:
+            try:
+                entry.conn.execute("SELECT 1")
+            except sqlite3.Error:
+                try:
+                    entry.conn.close()
+                except sqlite3.Error:
+                    pass
+                entry = None
+                _SHARED_CONNECTIONS.pop(key, None)
+            else:
+                entry.refcount += 1
+                return entry.conn
+
+        conn = _open_connection(normalized_path)
+        _SHARED_CONNECTIONS[key] = _SharedConnection(conn=conn, refcount=1)
+        return conn
+
+
+def release_shared_connection(conn: sqlite3.Connection | None, db_path: str = DEFAULT_DB_PATH) -> None:
+    """공유 연결 참조를 해제하고 마지막 사용자면 연결을 닫는다."""
+    if conn is None:
+        return
+
+    normalized_path = _normalize_db_path(db_path)
+    key = (threading.get_ident(), normalized_path)
+
+    with _POOL_LOCK:
+        entry = _SHARED_CONNECTIONS.get(key)
+        if entry is None or entry.conn is not conn:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+            return
+
+        entry.refcount -= 1
+        if entry.refcount > 0:
+            return
+
+        _SHARED_CONNECTIONS.pop(key, None)
+        try:
+            entry.conn.close()
+        except sqlite3.Error:
+            pass
 
 
 def _migrate_tables(conn: sqlite3.Connection) -> None:
@@ -164,12 +245,13 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     """)
 
     conn.commit()
-    print(f"[init_db] 스키마 초기화 완료: {conn}")
+    logger.debug("SQLite schema initialized for %s", conn)
 
 
 if __name__ == "__main__":
     db_path = DEFAULT_DB_PATH
-    print(f"[init_db] DB 초기화: {db_path}")
+    logging.basicConfig(level=logging.INFO)
+    logger.info("DB 초기화: %s", db_path)
     conn = init_db(db_path)
     conn.close()
-    print("[init_db] 완료")
+    logger.info("완료")

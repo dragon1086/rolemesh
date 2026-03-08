@@ -1,11 +1,15 @@
 import os
 import stat
 import subprocess
+import threading
 import time
 
 import pytest
 
+from rolemesh.core.init_db import get_shared_connection, release_shared_connection
 from rolemesh.core.quality_tracker import QualityTracker
+from rolemesh.core.registry_client import RegistryClient
+from rolemesh.routing.integration import IntegrationManager
 
 
 def test_quality_tracker_instance_creation(tmp_path):
@@ -113,6 +117,48 @@ def test_get_weekly_average_returns_none_for_empty_db(tmp_path):
         assert tracker.get_weekly_average() is None
     finally:
         tracker.close()
+
+
+def test_shared_connection_reused_across_registry_and_quality_tracker(tmp_path):
+    db_path = str(tmp_path / "shared.db")
+    tracker = QualityTracker(db_path=db_path)
+    client = RegistryClient(db_path=db_path)
+    mgr = IntegrationManager(db_path=db_path)
+    try:
+        assert tracker._conn_ctx() is client._conn_ctx()
+        assert tracker._conn_ctx() is mgr._client._conn_ctx()
+
+        tracker.close()
+
+        client.register_agent("bot-a", "Bot A", endpoint="http://localhost:9999")
+        rows = client._conn_ctx().execute("SELECT agent_id FROM agents").fetchall()
+        assert [row["agent_id"] for row in rows] == ["bot-a"]
+    finally:
+        client.close()
+        mgr.close()
+
+
+def test_shared_connection_isolated_per_thread(tmp_path):
+    db_path = str(tmp_path / "threaded.db")
+    main_conn = get_shared_connection(db_path)
+    worker_conn_id: list[int] = []
+
+    def _worker() -> None:
+        conn = get_shared_connection(db_path)
+        try:
+            worker_conn_id.append(id(conn))
+        finally:
+            release_shared_connection(conn, db_path)
+
+    thread = threading.Thread(target=_worker)
+    thread.start()
+    thread.join()
+
+    try:
+        assert worker_conn_id
+        assert worker_conn_id[0] != id(main_conn)
+    finally:
+        release_shared_connection(main_conn, db_path)
 
 
 def test_quality_report_script_exists_and_is_executable():

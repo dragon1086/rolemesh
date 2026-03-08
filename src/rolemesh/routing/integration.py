@@ -15,7 +15,6 @@ integration.py — RoleMesh Integration Manager
 
 import os
 import stat
-from typing import Optional
 
 from ..core.registry_client import RegistryClient
 
@@ -43,7 +42,7 @@ class IntegrationManager:
         (환경변수 ROLEMESH_DB로 재정의 가능)
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         self._db_path = db_path or DEFAULT_DB_PATH
         db_dir = os.path.dirname(self._db_path)
         if db_dir:
@@ -152,8 +151,8 @@ class IntegrationManager:
         name: str,
         cmd: str,
         provider: str,
-        scripts_dir: Optional[str] = None,
-        template_path: Optional[str] = None,
+        scripts_dir: str | None = None,
+        template_path: str | None = None,
     ) -> str:
         """{name}-delegate.sh 스크립트를 자동 생성한다.
 
