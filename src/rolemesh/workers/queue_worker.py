@@ -255,6 +255,32 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
         else:
             client.complete_task(task_id, summary=summary[:500])
             print(f"[worker] 완료: {task_id}")
+    except subprocess.TimeoutExpired as e:
+        _router.record_failure(provider)
+        error_msg = _format_task_error(e)[:300]
+        retry_count = int(task.get("retry_count") or 0)
+        max_retries = 3
+
+        if retry_count < max_retries:
+            delay = 30 * (2 ** retry_count)  # 30s → 60s → 120s
+            client.retry_task(task_id, retry_count + 1, delay)
+            print(
+                f"[worker] 타임아웃 예약: {task_id} "
+                f"(시도 {retry_count + 1}/{max_retries}, {delay}s 후) — {error_msg}",
+                file=sys.stderr,
+            )
+        else:
+            client.move_to_dlq(task_id, error_msg)
+            try:
+                _send_openclaw_event(
+                    f"DLQ: [{task['title']}] timeout 소진 — {error_msg[:150]}"
+                )
+            except Exception:
+                pass
+            print(
+                f"[worker] DLQ(timeout 소진): {task_id} — {error_msg}",
+                file=sys.stderr,
+            )
     except Exception as e:
         _router.record_failure(provider)
         timed_out = _is_timeout_error(e)
