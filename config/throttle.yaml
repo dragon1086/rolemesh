@@ -7,3 +7,5 @@
 anthropic: 15   # Anthropic API — 실제 한도 여유 확보 (rate limit 방지)
 openai: 20      # OpenAI API
 gemini: 60      # Google Gemini API
+
+batch_cooldown_sec: 120  # 배치 완료 후 다음 배치까지 최소 2분 대기

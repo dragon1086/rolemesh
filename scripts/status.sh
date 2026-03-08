@@ -33,6 +33,35 @@ ps aux | grep -E "rolemesh\.(queue_worker|message_worker|autoevo_worker)" | grep
   || echo "(실행 중인 워커 없음)"
 
 echo ""
+echo "--- Batch Cooldown Status ---"
+python3 -c "
+import json, time, sys
+STATE_FILE = '/tmp/rolemesh-batch-cooldown.json'
+COOLDOWN_SEC = 120.0
+try:
+    import yaml
+    cfg_path = __import__('pathlib').Path.home() / 'rolemesh' / 'config' / 'throttle.yaml'
+    if cfg_path.exists():
+        cfg = yaml.safe_load(cfg_path.open()) or {}
+        if 'batch_cooldown_sec' in cfg:
+            COOLDOWN_SEC = float(cfg['batch_cooldown_sec'])
+except Exception:
+    pass
+try:
+    d = json.load(open(STATE_FILE))
+    last = float(d.get('last_complete_at', 0))
+    remaining = COOLDOWN_SEC - (time.time() - last)
+    if remaining > 0:
+        print(f'  배치 쿨다운: {remaining:.0f}s 남음')
+    else:
+        print('  배치 쿨다운: READY')
+except FileNotFoundError:
+    print('  배치 쿨다운: READY (기록 없음)')
+except Exception as e:
+    print(f'  배치 쿨다운: ERROR ({e})')
+" 2>&1
+
+echo ""
 echo "--- Provider Circuit Breaker Status ---"
 for provider in anthropic openai gemini; do
   STATE_FILE="/tmp/rolemesh-cb-${provider}.json"

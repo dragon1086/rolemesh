@@ -7,12 +7,22 @@
 #   scripts/cokac-delegate.sh --dangerously-skip-permissions -p "자동 승인 필요한 작업"
 #
 # 주의: 직접 `claude -p` 호출 금지. 이 스크립트를 통해서만 위임할 것.
-# Throttle/CB가 자동 적용되어 Anthropic rate limit 방지.
+# Throttle/CB/BatchCooldown이 자동 적용되어 Anthropic rate limit 방지.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DELEGATE="$SCRIPT_DIR/claude-delegate.sh"
+
+# Python 경로 자동 탐색 (venv 우선)
+if [[ -f "$REPO_ROOT/.venv/bin/python3" ]]; then
+    PYTHON="$REPO_ROOT/.venv/bin/python3"
+elif [[ -f "$REPO_ROOT/venv/bin/python3" ]]; then
+    PYTHON="$REPO_ROOT/venv/bin/python3"
+else
+    PYTHON="python3"
+fi
 
 if [[ ! -f "$DELEGATE" ]]; then
     echo "[cokac-delegate] ❌ claude-delegate.sh 없음: $DELEGATE" >&2
@@ -33,5 +43,48 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 echo "[cokac-delegate] 📋 위임 시작: $TIMESTAMP" >&2
 echo "[cokac-delegate] 인수: $*" >&2
 
-# claude-delegate.sh로 위임 (CB/Throttle 체크 포함)
-exec "$DELEGATE" "$@"
+# ── 1. Batch Cooldown 체크 ────────────────────────────────────────────────────
+COOLDOWN_RESULT=$("$PYTHON" -c "
+import sys
+sys.path.insert(0, '$REPO_ROOT/src')
+try:
+    from rolemesh.adapters.batch_cooldown import BatchCooldown
+    bc = BatchCooldown()
+    remaining = bc.acquire()
+    if remaining > 0.0:
+        print(f'WAIT:{remaining:.1f}')
+    else:
+        print('OK:0')
+except Exception as e:
+    print(f'ERR:{e}')
+")
+
+CD_STATUS="${COOLDOWN_RESULT%%:*}"
+CD_DETAIL="${COOLDOWN_RESULT#*:}"
+
+if [[ "$CD_STATUS" == "WAIT" ]]; then
+    WAIT_INT=$(printf "%.0f" "$CD_DETAIL")
+    echo "[cokac-delegate] ⏳ 배치 쿨다운: ${CD_DETAIL}s 대기 중..." >&2
+    sleep "$WAIT_INT"
+fi
+
+if [[ "$CD_STATUS" == "ERR" ]]; then
+    echo "[cokac-delegate] ⚠️  BatchCooldown 체크 실패 (${CD_DETAIL}) — 체크 없이 진행" >&2
+fi
+
+# ── 2. claude-delegate.sh로 위임 (CB/Throttle 체크 포함) ─────────────────────
+DELEGATE_EXIT=0
+"$DELEGATE" "$@" || DELEGATE_EXIT=$?
+
+# ── 3. 배치 완료 시간 기록 ────────────────────────────────────────────────────
+"$PYTHON" -c "
+import sys
+sys.path.insert(0, '$REPO_ROOT/src')
+try:
+    from rolemesh.adapters.batch_cooldown import BatchCooldown
+    BatchCooldown().record_complete()
+except Exception:
+    pass
+" 2>/dev/null || true
+
+exit "$DELEGATE_EXIT"
