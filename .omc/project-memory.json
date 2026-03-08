@@ -92,8 +92,8 @@
     },
     {
       "path": "src/rolemesh/__main__.py",
-      "accessCount": 30,
-      "lastAccessed": 1772978582083,
+      "accessCount": 32,
+      "lastAccessed": 1772980881780,
       "type": "file"
     },
     {
@@ -205,6 +205,12 @@
       "type": "file"
     },
     {
+      "path": "scripts/cokac-delegate.sh",
+      "accessCount": 10,
+      "lastAccessed": 1772980881617,
+      "type": "file"
+    },
+    {
       "path": "tests/test_claude_delegate.sh",
       "accessCount": 8,
       "lastAccessed": 1772975895063,
@@ -235,9 +241,9 @@
       "type": "file"
     },
     {
-      "path": "scripts/cokac-delegate.sh",
+      "path": "tests/test_integration.py",
       "accessCount": 8,
-      "lastAccessed": 1772980566979,
+      "lastAccessed": 1772980888719,
       "type": "file"
     },
     {
@@ -265,12 +271,6 @@
       "type": "file"
     },
     {
-      "path": "tests/test_integration.py",
-      "accessCount": 6,
-      "lastAccessed": 1772978734729,
-      "type": "file"
-    },
-    {
       "path": "tests/test_intentgate_regression.py",
       "accessCount": 6,
       "lastAccessed": 1772978827971,
@@ -281,6 +281,12 @@
       "accessCount": 6,
       "lastAccessed": 1772978960233,
       "type": "directory"
+    },
+    {
+      "path": "scripts/claude-delegate.sh",
+      "accessCount": 6,
+      "lastAccessed": 1772980888140,
+      "type": "file"
     },
     {
       "path": "README.md",
@@ -328,12 +334,6 @@
       "path": "examples/quickstart/run_demo.sh",
       "accessCount": 4,
       "lastAccessed": 1772978219111,
-      "type": "file"
-    },
-    {
-      "path": "scripts/claude-delegate.sh",
-      "accessCount": 4,
-      "lastAccessed": 1772980478428,
       "type": "file"
     },
     {

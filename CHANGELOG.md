@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-03-08
+
+### Added
+- SmartRouter: Anthropic -> Codex -> Gemini 자동 fallback (17차)
+- `scripts/smart-delegate.sh`: provider 자동 선택 위임 진입점
+- QualityTracker: 배치 품질 점수 수집 + 주간 평균 추적 (18차)
+- `scripts/quality-report.sh`: quality report CLI
+- `scripts/codex-delegate.sh`: Codex 빌더 전용 위임 진입점 (16차)
+- `integration add` 시 `delegate.sh` 자동 생성 (15차)
+
 ## [0.1.0] - 2026-03-08
 
 ### Phase 1 — Core Stability
