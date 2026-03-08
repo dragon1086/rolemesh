@@ -153,6 +153,16 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS quality_scores (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id TEXT NOT NULL,
+            score    REAL NOT NULL,
+            provider TEXT NOT NULL,
+            ts       REAL NOT NULL
+        )
+    """)
+
     conn.commit()
     print(f"[init_db] 스키마 초기화 완료: {conn}")
 

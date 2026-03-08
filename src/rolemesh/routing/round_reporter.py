@@ -7,6 +7,7 @@ rolemesh_round_reporter.py
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import signal
@@ -14,6 +15,8 @@ import sqlite3
 import subprocess
 import sys
 import time
+
+from ..core.quality_tracker import QualityTracker
 
 DB = os.path.expanduser("~/ai-comms/registry.db")
 PID_FILE = "/tmp/rolemesh-round-reporter.pid"
@@ -67,9 +70,57 @@ def _latest_fully_done_round(conn: sqlite3.Connection) -> tuple[int | None, dict
     return None, {}
 
 
+def _extract_done_report_v1(summary: str) -> dict | None:
+    text = summary or ""
+    marker = "DONE_REPORT_V1:"
+    if marker not in text:
+        return None
+    raw = text.split(marker, 1)[1].strip().splitlines()[0].strip()
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _record_quality_scores(
+    quality_tracker: QualityTracker,
+    round_no: int,
+    summaries: list[str],
+) -> None:
+    for index, summary in enumerate(summaries, start=1):
+        report = _extract_done_report_v1(summary)
+        if not report:
+            continue
+
+        score = report.get("score")
+        if score is None:
+            continue
+
+        batch_id = str(
+            report.get("batch_id")
+            or report.get("task_id")
+            or report.get("id")
+            or f"R{round_no}-{index}"
+        )
+        provider = str(report.get("provider") or report.get("assignee") or "unknown")
+        timestamp = report.get("timestamp") or report.get("ts")
+
+        try:
+            quality_tracker.record(
+                batch_id=batch_id,
+                score=float(score),
+                provider=provider,
+                timestamp=None if timestamp is None else float(timestamp),
+            )
+        except Exception:
+            continue
+
+
 def run_loop(poll: int = 20):
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
+    quality_tracker = QualityTracker(DB)
 
     last_reported = 0
     if os.path.exists(STATE_FILE):
@@ -82,6 +133,7 @@ def run_loop(poll: int = 20):
         try:
             r, info = _latest_fully_done_round(conn)
             if r and r > last_reported:
+                _record_quality_scores(quality_tracker, r, info.get("summaries", []))
                 lines = []
                 for s in info.get("summaries", [])[:3]:
                     s = " ".join(s.split())
