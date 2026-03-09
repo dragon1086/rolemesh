@@ -16,6 +16,7 @@ class MessageClass(str, Enum):
     ANALYSIS = "analysis"
     MEMORY = "memory"
     COORDINATION = "coordination"
+    KANBAN = "kanban"
 
 
 @dataclass(frozen=True)
@@ -83,16 +84,22 @@ class TelegramBridge:
     def __init__(self, router: SmartRouter | None = None) -> None:
         self.router = router or SmartRouter()
 
+    _KANBAN_COMMANDS = ("/board", "/add", "/done", "/move", "/tasks", "/cancel")
+
     def classify(self, message: str) -> MessageClass:
         """Classify a Telegram message into one of the bridge buckets."""
-        text = (message or "").strip().casefold()
+        text = (message or "").strip()
         if not text:
             return MessageClass.COORDINATION
-        if self._contains_any(text, self._MEMORY_KEYWORDS):
+        # 슬래시 칸반 명령 우선 감지
+        if any(text.casefold().startswith(cmd) for cmd in self._KANBAN_COMMANDS):
+            return MessageClass.KANBAN
+        text_lower = text.casefold()
+        if self._contains_any(text_lower, self._MEMORY_KEYWORDS):
             return MessageClass.MEMORY
-        if self._contains_any(text, self._CODING_KEYWORDS):
+        if self._contains_any(text_lower, self._CODING_KEYWORDS):
             return MessageClass.CODING
-        if self._contains_any(text, self._ANALYSIS_KEYWORDS):
+        if self._contains_any(text_lower, self._ANALYSIS_KEYWORDS):
             return MessageClass.ANALYSIS
         return MessageClass.COORDINATION
 
@@ -141,6 +148,14 @@ class TelegramBridge:
                 provider="self",
                 delegate_script=None,
                 reason="memory command detected; keep the request in local coordination flow",
+            )
+
+        if message_class is MessageClass.KANBAN:
+            return RouteResult(
+                message_class=message_class,
+                provider="self",
+                delegate_script=None,
+                reason="kanban slash command detected; handle locally via TelegramKanban",
             )
 
         return RouteResult(
