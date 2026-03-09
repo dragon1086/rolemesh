@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import signal
 import sqlite3
@@ -26,6 +27,7 @@ from ..adapters.throttle import TokenBucketThrottle
 
 
 PID_FILE = "/tmp/macrs_worker.pid"
+logger = logging.getLogger(__name__)
 POLL_INTERVAL = 30  # seconds
 THROTTLE_MAX_RETRIES = 3  # max waits before rescheduling task
 DONE_EVENT_COOLDOWN_SEC = 120
@@ -157,10 +159,7 @@ def _select_provider_with_throttle(task_id: str, client: RegistryClient) -> str 
         provider = _router.route()
         if provider == FALLBACK_PROVIDER:
             # All circuits OPEN — no point throttle-retrying
-            print(
-                f"[worker] 모든 provider OPEN → 재스케줄: {task_id}",
-                file=sys.stderr,
-            )
+            logger.warning("worker all providers open, rescheduling task_id=%s", task_id)
             return None
 
         result = _throttle.acquire(provider)
@@ -168,18 +167,18 @@ def _select_provider_with_throttle(task_id: str, client: RegistryClient) -> str 
             return provider
 
         wait_sec = float(result)
-        print(
-            f"[worker] throttle wait {wait_sec:.1f}s (attempt {attempt + 1}/{THROTTLE_MAX_RETRIES})"
-            f" provider={provider} task={task_id}",
-            file=sys.stderr,
+        logger.info(
+            "worker throttle wait %.1fs attempt=%s/%s provider=%s task_id=%s",
+            wait_sec,
+            attempt + 1,
+            THROTTLE_MAX_RETRIES,
+            provider,
+            task_id,
         )
         time.sleep(wait_sec)
 
     # Throttle exhausted after retries
-    print(
-        f"[worker] throttle 소진 → 재스케줄: {task_id}",
-        file=sys.stderr,
-    )
+    logger.warning("worker throttle exhausted, rescheduling task_id=%s", task_id)
     return None
 
 
@@ -193,10 +192,10 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
     provider = _select_provider_with_throttle(task_id, client)
     if provider is None:
         client.retry_task(task_id, int(task.get("retry_count") or 0) + 1, 60)
-        print(f"[worker] 재스케줄(provider 없음): {task_id}", file=sys.stderr)
+        logger.warning("worker provider unavailable, rescheduled task_id=%s", task_id)
         return
 
-    print(f"[worker] 실행: {task_id} ({task['title']}) via {provider}")
+    logger.info("worker executing task_id=%s title=%s provider=%s", task_id, task["title"], provider)
 
     try:
         if kind and kind != "auto":
@@ -223,7 +222,7 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
                 _send_openclaw_event(f"Hold: [{task['title']}] delegated-only result blocked")
             except Exception:
                 pass
-            print(f"[worker] 보류(검증실패): {task_id}", file=sys.stderr)
+            logger.warning("worker verification failed delegated-only task_id=%s", task_id)
             return
 
         if report and not _is_verified_report(report):
@@ -233,7 +232,7 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
                 _send_openclaw_event(f"Hold: [{task['title']}] invalid DONE_REPORT_V1")
             except Exception:
                 pass
-            print(f"[worker] 보류(리포트검증실패): {task_id}", file=sys.stderr)
+            logger.warning("worker verification failed invalid report task_id=%s", task_id)
             return
 
         # 본체 성공 — announce 시도
@@ -251,10 +250,14 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
                 error=f"announce_failed: {announce_error}",
                 status="completed_with_announce_error",
             )
-            print(f"[worker] 완료(announce 실패): {task_id} — {announce_error}", file=sys.stderr)
+            logger.warning(
+                "worker completed with announce failure task_id=%s error=%s",
+                task_id,
+                announce_error,
+            )
         else:
             client.complete_task(task_id, summary=summary[:500])
-            print(f"[worker] 완료: {task_id}")
+            logger.info("worker completed task_id=%s", task_id)
     except subprocess.TimeoutExpired as e:
         _router.record_failure(provider)
         error_msg = _format_task_error(e)[:300]
@@ -264,10 +267,13 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
         if retry_count < max_retries:
             delay = 30 * (2 ** retry_count)  # 30s → 60s → 120s
             client.retry_task(task_id, retry_count + 1, delay)
-            print(
-                f"[worker] 타임아웃 예약: {task_id} "
-                f"(시도 {retry_count + 1}/{max_retries}, {delay}s 후) — {error_msg}",
-                file=sys.stderr,
+            logger.warning(
+                "worker timeout retry scheduled task_id=%s attempt=%s/%s delay=%ss error=%s",
+                task_id,
+                retry_count + 1,
+                max_retries,
+                delay,
+                error_msg,
             )
         else:
             client.move_to_dlq(task_id, error_msg)
@@ -277,9 +283,10 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
                 )
             except Exception:
                 pass
-            print(
-                f"[worker] DLQ(timeout 소진): {task_id} — {error_msg}",
-                file=sys.stderr,
+            logger.error(
+                "worker moved to dlq after timeout task_id=%s error=%s",
+                task_id,
+                error_msg,
             )
     except Exception as e:
         _router.record_failure(provider)
@@ -291,10 +298,14 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
         if retry_count < max_retries:
             delay = 30 * (2 ** retry_count)  # 30s → 60s → 120s
             client.retry_task(task_id, retry_count + 1, delay)
-            print(
-                f"[worker] {'타임아웃' if timed_out else '재시도'} 예약: {task_id} "
-                f"(시도 {retry_count + 1}/{max_retries}, {delay}s 후) — {error_msg}",
-                file=sys.stderr,
+            logger.warning(
+                "worker retry scheduled task_id=%s timed_out=%s attempt=%s/%s delay=%ss error=%s",
+                task_id,
+                timed_out,
+                retry_count + 1,
+                max_retries,
+                delay,
+                error_msg,
             )
         else:
             client.move_to_dlq(task_id, error_msg)
@@ -304,9 +315,11 @@ def _run_task(task: dict, orchestrator: SymphonyMACRS, client: RegistryClient) -
                 )
             except Exception:
                 pass
-            print(
-                f"[worker] DLQ({'timeout' if timed_out else 'retry'} 소진): {task_id} — {error_msg}",
-                file=sys.stderr,
+            logger.error(
+                "worker moved to dlq after retries task_id=%s timed_out=%s error=%s",
+                task_id,
+                timed_out,
+                error_msg,
             )
 
 
@@ -333,19 +346,22 @@ def recover_stale(stale_threshold_seconds: int = 1800, db_path: str = DEFAULT_DB
         finally:
             conn.close()
     except Exception as e:
-        print(f"[worker] recover_stale 오류: {e}", file=sys.stderr)
+        logger.exception("worker recover_stale failed: %s", e)
         return 0
 
     if recovered:
-        print(f"[worker] recover_stale: {recovered}건 pending 복귀 (임계={stale_threshold_seconds}s)", file=sys.stderr)
+        logger.info(
+            "worker recovered stale tasks count=%s stale_threshold_seconds=%s",
+            recovered,
+            stale_threshold_seconds,
+        )
     return recovered
 
 
 def run_loop() -> None:
     client = RegistryClient()
     orchestrator = SymphonyMACRS(registry=client)
-    # 시작 로그는 stderr로 (사용자 채널 차단, 디버그용 유지)
-    print(f"[worker] 시작 (PID={os.getpid()}, poll={POLL_INTERVAL}s)", file=sys.stderr)
+    logger.info("worker started pid=%s poll=%ss", os.getpid(), POLL_INTERVAL)
 
     last_stale_check = 0.0
     while True:

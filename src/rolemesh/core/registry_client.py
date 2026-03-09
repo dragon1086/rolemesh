@@ -161,7 +161,17 @@ class RegistryClient:
         description: str = "",
         endpoint: str = "",
     ) -> None:
-        """에이전트 등록 (이미 있으면 업데이트)"""
+        """Register or refresh an agent row.
+
+        Args:
+            agent_id: 레지스트리에서 에이전트를 식별하는 고유 ID.
+            display_name: UI/로그에 노출할 표시 이름.
+            description: 선택적인 에이전트 설명.
+            endpoint: 헬스체크 또는 호출에 사용할 선택적 엔드포인트.
+
+        Returns:
+            None. 기존 agent_id가 있으면 최신 메타데이터와 heartbeat로 갱신한다.
+        """
         conn = self._conn_ctx()
         conn.execute("""
             INSERT INTO agents (agent_id, display_name, description, endpoint, last_heartbeat, status)
@@ -216,7 +226,19 @@ class RegistryClient:
         cost_level: str = "medium",
         avg_latency_ms: int = 0,
     ) -> None:
-        """에이전트의 능력 등록 (이미 있으면 업데이트)"""
+        """Register a capability for an agent.
+
+        Args:
+            agent_id: 능력을 소유한 에이전트 ID.
+            name: capability 이름.
+            description: capability 설명.
+            keywords: 키워드 폴백 라우팅에 사용할 키워드 목록.
+            cost_level: low/medium/high 등의 비용 티어.
+            avg_latency_ms: 관측된 평균 지연 시간.
+
+        Returns:
+            None. 동일한 `(agent_id, name)` 조합이 있으면 교체 저장한다.
+        """
         keywords_json = json.dumps(keywords or [], ensure_ascii=False)
         conn = self._conn_ctx()
         conn.execute(
@@ -367,7 +389,7 @@ class RegistryClient:
 
     def lookup(self, task_text: str, top_k: int = 3) -> list[AgentMatch]:
         """
-        태스크 텍스트에 맞는 에이전트+능력 반환 (LLM 의미 기반, 폴백: 키워드 매칭).
+        태스크 텍스트에 맞는 에이전트+능력 후보를 반환한다.
 
         LLM 라우팅 (OPENAI_API_KEY 필요):
           - GPT-4o-mini로 태스크 의미 분석 후 최적 에이전트 선택
@@ -378,7 +400,13 @@ class RegistryClient:
           - 실적 가중치: 성공률 × 0.3
           - 오프라인 에이전트 제외
 
-        반환값에 routing_explanation (선택 이유), routing_id (피드백 참조) 포함.
+        Args:
+            task_text: 라우팅할 자연어 작업 설명.
+            top_k: 반환할 최대 후보 수.
+
+        Returns:
+            `AgentMatch` 목록. 각 항목에는 점수, 선택 이유(`routing_explanation`),
+            피드백 추적용 `routing_id`가 포함된다.
         """
         conn = self._conn_ctx()
         task_lower = task_text.lower()
@@ -812,9 +840,14 @@ class RegistryClient:
         return task_id
 
     def dequeue_next(self) -> dict | None:
-        """pending 중 우선순위 최고 태스크를 running으로 원자적 변경 후 반환. 없으면 None.
+        """Claim the next runnable task from the queue.
 
-        run_after가 설정된 태스크는 해당 시각 이후에만 dequeue.
+        Args:
+            None.
+
+        Returns:
+            가장 우선순위가 높은 pending 태스크를 `running`으로 원자적으로 전환한 dict.
+            실행 가능한 태스크가 없으면 `None`. `run_after`가 미래인 태스크는 제외된다.
         """
         conn = self._conn_ctx()
         now = time.time()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import tempfile
 import signal
@@ -26,6 +27,7 @@ except Exception:
     _AUTOEVO_THROTTLE = False
 
 PID_FILE = "/tmp/rolemesh-autoevo-worker.pid"
+logger = logging.getLogger(__name__)
 TOPIC = "요즘 오픈클로나 별에 별 AI가 나와서 뭘써야할지 모르겠어서 많이 받아놨어. 진짜 쓸모있게 쓰는 법 어디 없나?"
 SOURCE = "rolemesh-autoevo"
 STATE_FILE = "/tmp/rolemesh-autoevo.state.json"
@@ -233,17 +235,21 @@ def enqueue_round(client: RegistryClient, conn: sqlite3.Connection, round_no: in
     for title, desc, kind, prio in phase_defs:
         skip, reason = _should_skip_task(conn, title)
         if skip:
-            print(f"[rolemesh-autoevo] skip enqueue: {title} ({reason})")
+            logger.info("rolemesh-autoevo skip enqueue title=%s reason=%s", title, reason)
             continue
         # Throttle check before enqueue
         if _AUTOEVO_THROTTLE:
             _wait = _autoevo_throttle.acquire("anthropic")
             if _wait is not True:
-                print(f"[rolemesh-autoevo] throttle wait {_wait:.1f}s before enqueue: {title}")
+                logger.info(
+                    "rolemesh-autoevo throttle wait %.1fs before enqueue title=%s",
+                    float(_wait),
+                    title,
+                )
                 time.sleep(float(_wait))
                 _wait2 = _autoevo_throttle.acquire("anthropic")
                 if _wait2 is not True:
-                    print(f"[rolemesh-autoevo] throttle retry failed, skip enqueue: {title}")
+                    logger.warning("rolemesh-autoevo throttle retry failed title=%s", title)
                     continue
         try:
             task_id = client.enqueue(
@@ -259,7 +265,7 @@ def enqueue_round(client: RegistryClient, conn: sqlite3.Connection, round_no: in
                 source=SOURCE,
             )
         except Exception as e:
-            print(f"[rolemesh-autoevo] enqueue failed: {title} ({e})", file=sys.stderr)
+            logger.exception("rolemesh-autoevo enqueue failed title=%s error=%s", title, e)
             continue
         ids.append(task_id)
     return ids
@@ -268,7 +274,7 @@ def enqueue_round(client: RegistryClient, conn: sqlite3.Connection, round_no: in
 def run_loop(poll_sec: int = 60) -> None:
     client = RegistryClient()
     st = _load_state()
-    print(f"[rolemesh-autoevo] started poll={poll_sec}s pid={os.getpid()}")
+    logger.info("rolemesh-autoevo started poll=%ss pid=%s", poll_sec, os.getpid())
 
     while True:
         try:
@@ -281,9 +287,9 @@ def run_loop(poll_sec: int = 60) -> None:
                     st["empty_streak"] = 0
                     st["last_reason"] = f"resumed:{why}"
                     _save_state(st)
-                    print(f"[rolemesh-autoevo] resumed reason={why}")
+                    logger.info("rolemesh-autoevo resumed reason=%s", why)
                 else:
-                    print(f"[rolemesh-autoevo] paused {remain}s reason={reason}")
+                    logger.info("rolemesh-autoevo paused remain=%ss reason=%s", remain, reason)
                     time.sleep(min(poll_sec, max(30, remain)))
                     st = _load_state()
                     continue
@@ -291,14 +297,14 @@ def run_loop(poll_sec: int = 60) -> None:
             risky, risk_reason = _has_convergence_risk(conn)
             if risky:
                 st = _pause(st, risk_reason)
-                print(f"[rolemesh-autoevo] pause triggered: {risk_reason}")
+                logger.warning("rolemesh-autoevo pause triggered reason=%s", risk_reason)
                 time.sleep(poll_sec)
                 continue
 
             if not _has_active(conn):
                 r = _next_round(conn)
                 ids = enqueue_round(client, conn, r)
-                print(f"[rolemesh-autoevo] enqueued round R{r} ({len(ids)} tasks)")
+                logger.info("rolemesh-autoevo enqueued round=%s task_count=%s", r, len(ids))
 
                 if len(ids) == 0:
                     st["empty_streak"] = int(st.get("empty_streak", 0)) + 1
@@ -311,7 +317,7 @@ def run_loop(poll_sec: int = 60) -> None:
 
             time.sleep(poll_sec)
         except Exception as e:
-            print(f"[rolemesh-autoevo] error: {e}", file=sys.stderr)
+            logger.exception("rolemesh-autoevo loop error: %s", e)
             time.sleep(poll_sec)
 
 

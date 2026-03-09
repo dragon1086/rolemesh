@@ -1,8 +1,9 @@
-from .symphony_fusion import SymphonyMACRS, WorkItem, WorkResult
+from .symphony_fusion import RoleMeshOrchestrator, SymphonyMACRS, WorkItem, WorkResult
 from .role_mapper import RoleMapper
 from .integration import IntegrationManager, DuplicateIntegrationError, IntegrationNotFoundError
 
-__all__ = [
+__all__: list[str] = [
+    "RoleMeshOrchestrator",
     "SymphonyMACRS",
     "WorkItem",
     "WorkResult",

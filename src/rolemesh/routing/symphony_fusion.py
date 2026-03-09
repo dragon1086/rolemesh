@@ -66,7 +66,7 @@ class WorkResult:
 
 
 class SymphonyMACRS:
-    def __init__(self, registry: RegistryClient | None = None):
+    def __init__(self, registry: RegistryClient | None = None) -> None:
         self.registry = registry or RegistryClient()
 
     def _distill_core_request(self, text: str) -> str:
@@ -471,7 +471,7 @@ class SymphonyMACRS:
         }
 
 
-def main():
+def main() -> None:
     import argparse
 
     p = argparse.ArgumentParser(description="Symphony×MACRS orchestrator")
