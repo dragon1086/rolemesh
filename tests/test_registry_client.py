@@ -174,6 +174,16 @@ def test_enqueue_hydrates_retry_description_from_payload(client):
     assert msg_id in row["description"]
 
 
+def test_enqueue_rejects_empty_title(client):
+    with pytest.raises(ValueError, match="title is empty"):
+        client.enqueue("   ", "valid description")
+
+
+def test_enqueue_rejects_empty_description(client):
+    with pytest.raises(ValueError, match="description is empty"):
+        client.enqueue("valid title", "   ")
+
+
 def test_hydrate_retry_description_reads_existing_payload():
     msg_id = "msg-20260101-120000"
     with patch("rolemesh.core.registry_client.os.path.exists", return_value=True), \

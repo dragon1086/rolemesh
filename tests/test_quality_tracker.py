@@ -100,6 +100,20 @@ def test_get_stats_recent_days_filters_below_threshold_ratio(tmp_path):
         tracker.close()
 
 
+def test_quality_tracker_rejects_invalid_threshold(tmp_path):
+    with pytest.raises(ValueError, match="threshold must be"):
+        QualityTracker(db_path=str(tmp_path / "quality.db"), threshold=101.0)
+
+
+def test_get_stats_rejects_non_positive_recent_days(tmp_path):
+    tracker = QualityTracker(db_path=str(tmp_path / "quality.db"))
+    try:
+        with pytest.raises(ValueError, match="recent_days must be"):
+            tracker.get_stats(recent_days=0)
+    finally:
+        tracker.close()
+
+
 def test_weekly_average_excludes_scores_older_than_seven_days(tmp_path):
     now = time.time()
     tracker = QualityTracker(db_path=str(tmp_path / "quality.db"))

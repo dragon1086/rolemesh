@@ -12,12 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 class QualityTracker:
-    def __init__(self, db_path: str = DEFAULT_DB_PATH, threshold: float = 85.0):
+    """Persist and summarize quality scores recorded for completed work batches."""
+
+    def __init__(self, db_path: str = DEFAULT_DB_PATH, threshold: float = 85.0) -> None:
+        """Initialize the tracker with a shared SQLite connection and score threshold."""
         self.db_path = os.path.expanduser(db_path)
         self.threshold = float(threshold)
+        if not isfinite(self.threshold) or not 0.0 <= self.threshold <= 100.0:
+            raise ValueError("threshold must be a finite value between 0 and 100. Use a score boundary such as 85.0.")
         self._conn = get_shared_connection(self.db_path)
 
     def close(self) -> None:
+        """Release the shared SQLite connection held by this tracker."""
         release_shared_connection(self._conn, self.db_path)
         self._conn = None
 
@@ -38,9 +44,10 @@ class QualityTracker:
         provider: str,
         timestamp: float | None = None,
     ) -> None:
+        """Store a single quality score measurement for a batch/provider pair."""
         score_value = float(score)
         if not isfinite(score_value) or not 0.0 <= score_value <= 100.0:
-            raise ValueError("score must be a finite value between 0 and 100")
+            raise ValueError("score must be a finite value between 0 and 100. Pass a normalized percentage score.")
         conn = self._conn_ctx()
         conn.execute(
             """
@@ -57,6 +64,7 @@ class QualityTracker:
         conn.commit()
 
     def get_weekly_average(self) -> float | None:
+        """Return the average score recorded during the last 7 days."""
         conn = self._conn_ctx()
         cutoff = time.time() - (7 * 24 * 60 * 60)
         row = conn.execute(
@@ -67,6 +75,9 @@ class QualityTracker:
         return None if value is None else float(value)
 
     def get_stats(self, recent_days: int | None = None) -> dict[str, float | int | None]:
+        """Return summary statistics for all scores or only the most recent N days."""
+        if recent_days is not None and recent_days <= 0:
+            raise ValueError("recent_days must be a positive integer when provided. Use None for all-time stats.")
         conn = self._conn_ctx()
         params: tuple[float, ...] = ()
         where = ""

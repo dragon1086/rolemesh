@@ -26,18 +26,21 @@ class ProviderRouter:
         cooldown_sec: int = 60,
     ) -> None:
         if failure_threshold < 1:
-            raise ValueError("failure_threshold must be >= 1")
+            raise ValueError("failure_threshold must be >= 1. Use 1 or greater so the circuit breaker can open after failures.")
         if cooldown_sec < 0:
-            raise ValueError("cooldown_sec must be >= 0")
+            raise ValueError("cooldown_sec must be >= 0. Use 0 to disable cooldown or a positive retry delay.")
 
         raw_providers = list(DEFAULT_PROVIDERS) if providers is None else list(providers)
         normalized: list[str] = []
         for provider in raw_providers:
             if not isinstance(provider, str) or not provider.strip():
-                raise ValueError("providers must contain non-empty strings")
+                raise ValueError("providers must contain non-empty strings. Remove blank entries from the provider list.")
             provider_name = provider.strip()
             if provider_name == FALLBACK_PROVIDER:
-                raise ValueError(f"{FALLBACK_PROVIDER!r} is reserved for fallback routing")
+                raise ValueError(
+                    f"{FALLBACK_PROVIDER!r} is reserved for fallback routing. "
+                    "Remove it from providers and let ProviderRouter return it automatically."
+                )
             normalized.append(provider_name)
 
         self.providers = normalized
@@ -47,7 +50,7 @@ class ProviderRouter:
         )
 
     def route(self, task: Any = None) -> str:  # noqa: ARG002
-        """Return the first available provider name, or FALLBACK_PROVIDER.
+        """Return the first available provider name, or the fallback provider.
 
         Iterates providers in order; returns the first whose circuit is
         CLOSED or HALF_OPEN. Falls back to 'local_rule' if all are OPEN.

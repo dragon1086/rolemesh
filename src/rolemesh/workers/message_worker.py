@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -25,6 +26,7 @@ from ..adapters.amp_caller import ask_amp
 
 PID_FILE_TMPL = "/tmp/macrs_message_worker_{agent}.pid"
 POLL_INTERVAL = 5
+logger = logging.getLogger(__name__)
 
 
 def _recover_stale_messages(client: RegistryClient, agent: str, stale_sec: int) -> int:
@@ -50,10 +52,10 @@ def _process_claimed_messages(client: RegistryClient, agent: str, msgs: list[Mes
         try:
             ok, detail = _handle(m, client, agent)
             client.ack_message(m.id, status="done" if ok else "failed")
-            print(f"[msg-worker] {m.id} -> {'done' if ok else 'failed'} ({detail})")
+            logger.info("message %s -> %s (%s)", m.id, "done" if ok else "failed", detail)
         except Exception as e:
             client.ack_message(m.id, status="failed")
-            print(f"[msg-worker] {m.id} -> failed ({e})", file=sys.stderr)
+            logger.exception("message %s -> failed (%s)", m.id, e)
 
 
 def _to_cokac(msg: Message) -> tuple[bool, str]:
@@ -117,13 +119,13 @@ def _handle(msg: Message, client: RegistryClient, agent: str) -> tuple[bool, str
 
 def run_loop(agent: str, poll: int = POLL_INTERVAL, stale_sec: int = 300) -> None:
     client = RegistryClient()
-    print(f"[msg-worker] start agent={agent} poll={poll}s stale={stale_sec}s pid={os.getpid()}")
+    logger.info("message worker start agent=%s poll=%ss stale=%ss pid=%s", agent, poll, stale_sec, os.getpid())
 
     while True:
         try:
             recovered = _recover_stale_messages(client, agent, stale_sec)
             if recovered:
-                print(f"[msg-worker] recovered {recovered} stale messages for {agent}")
+                logger.info("recovered %s stale messages for %s", recovered, agent)
 
             msgs = client.claim_pending(to_agent=agent, limit=20)
             if not msgs:
@@ -132,7 +134,7 @@ def run_loop(agent: str, poll: int = POLL_INTERVAL, stale_sec: int = 300) -> Non
 
             _process_claimed_messages(client, agent, msgs)
         except Exception as e:
-            print(f"[msg-worker] loop error for {agent}: {e}", file=sys.stderr)
+            logger.exception("message worker loop error for %s: %s", agent, e)
             time.sleep(poll)
 
 

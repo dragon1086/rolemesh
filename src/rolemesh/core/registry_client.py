@@ -757,8 +757,19 @@ class RegistryClient:
         - rolemesh Builder Prototype 추상 요청은 차단
         """
         conn = self._conn_ctx()
-        norm_title = _normalize_task_title(title)
+        title_text = (title or "").strip()
+        if not title_text:
+            raise ValueError(
+                "enqueue failed: title is empty. Provide a short task title that identifies the work item."
+            )
+
         desc = _hydrate_retry_description((description or "").strip())
+        if not desc:
+            raise ValueError(
+                "enqueue failed: description is empty. Add the task context, expected output, and acceptance criteria."
+            )
+
+        norm_title = _normalize_task_title(title_text)
 
         # 1) admission gate: 반복되는 추상 coding 요청 차단
         if source in ("rolemesh-build", "rolemesh-autoevo") and kind == "coding":
@@ -770,7 +781,11 @@ class RegistryClient:
                 ]
                 is_generic = (len(desc) < 40) or any(m in desc for m in generic_markers)
                 if is_generic:
-                    raise ValueError("enqueue blocked: coding task spec too generic. required: (1) target files/modules (2) feature list (3) input/output spec (4) acceptance tests")
+                    raise ValueError(
+                        "enqueue blocked: coding task spec is too generic. "
+                        "Add (1) target files/modules, (2) feature list, "
+                        "(3) input/output spec, and (4) acceptance tests."
+                    )
 
         # 2) semantic dedupe: 같은 의미 제목의 활성 태스크 재생성 방지
         rows = conn.execute(
@@ -784,16 +799,16 @@ class RegistryClient:
         ).fetchall()
         for r in rows:
             if _normalize_task_title(r["title"]) == norm_title:
-                logger.info("queue deduped: reuse %s - %s", r["id"], title)
+                logger.info("queue deduped: reuse %s - %s", r["id"], title_text)
                 return r["id"]
 
         task_id = str(uuid.uuid4())
         conn.execute("""
             INSERT INTO task_queue (id, title, description, kind, status, priority, source, created_at)
             VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
-        """, (task_id, title, desc, kind, priority, source, time.time()))
+        """, (task_id, title_text, desc, kind, priority, source, time.time()))
         conn.commit()
-        logger.info("queue enqueued: %s - %s", task_id, title)
+        logger.info("queue enqueued: %s - %s", task_id, title_text)
         return task_id
 
     def dequeue_next(self) -> dict | None:

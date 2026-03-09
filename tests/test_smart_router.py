@@ -79,6 +79,16 @@ def test_get_delegate_script_mapping(isolate_state, provider, expected):
     assert SmartRouter().get_delegate_script(provider) == expected
 
 
+def test_get_delegate_script_rejects_unknown_provider(isolate_state):
+    with pytest.raises(ValueError, match="Choose one of"):
+        SmartRouter().get_delegate_script("unknown")
+
+
+def test_smart_router_rejects_blank_provider_names(isolate_state):
+    with pytest.raises(ValueError, match="non-empty strings"):
+        SmartRouter(providers=["anthropic", " "])
+
+
 def test_smart_delegate_file_exists_and_is_executable():
     assert SCRIPT_PATH.exists(), f"파일 없음: {SCRIPT_PATH}"
     mode = os.stat(SCRIPT_PATH).st_mode

@@ -1,1 +1,5 @@
-# CLI package
+"""RoleMesh CLI package."""
+
+from .__main__ import main
+
+__all__ = ["main"]

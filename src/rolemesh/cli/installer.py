@@ -39,7 +39,7 @@ class RoleConfig:
 
 
 class RoleMeshInstaller:
-    def __init__(self, db_path: str = DEFAULT_DB_PATH):
+    def __init__(self, db_path: str = DEFAULT_DB_PATH) -> None:
         self.db_path = db_path
 
     # ── 환경 탐지 ──────────────────────────────────────────────
@@ -188,7 +188,7 @@ class RoleMeshInstaller:
     # ── 출력 헬퍼 ─────────────────────────────────────────────
 
     @staticmethod
-    def _print_header():
+    def _print_header() -> None:
         print()
         print("=" * 56)
         print("  RoleMesh Installer Wizard v0.1")
@@ -197,7 +197,7 @@ class RoleMeshInstaller:
         print()
 
     @staticmethod
-    def _print_env_summary(env: Environment):
+    def _print_env_summary(env: Environment) -> None:
         print("[1/4] 환경 탐지 결과")
         print(f"  Python       : {env.python_version}")
         print(f"  claude       : {'✓ ' + env.claude_path if env.has_claude else '✗ 미감지'}")
@@ -208,7 +208,7 @@ class RoleMeshInstaller:
         print()
 
     @staticmethod
-    def _print_roles(roles: list[RoleConfig]):
+    def _print_roles(roles: list[RoleConfig]) -> None:
         print("[2/4] 추천 역할 구성")
         for r in roles:
             tool_info = f" ({r.tool})" if r.tool else ""

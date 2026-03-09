@@ -42,7 +42,7 @@ class IntegrationManager:
         (환경변수 ROLEMESH_DB로 재정의 가능)
     """
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(self, db_path: str | None = None) -> None:
         self._db_path = db_path or DEFAULT_DB_PATH
         db_dir = os.path.dirname(self._db_path)
         if db_dir:
@@ -93,15 +93,21 @@ class IntegrationManager:
         DuplicateIntegrationError
             allow_update=False 상태에서 동일 name이 이미 존재할 때
         ValueError
-            cmd가 빈 문자열이고 auto_script=True일 때
+            name/role/endpoint가 비어 있거나, cmd가 빈 문자열이고 auto_script=True일 때
         """
         name = name.strip()
+        role = role.strip()
+        endpoint = endpoint.strip()
         if not name:
-            raise ValueError("name은 비어 있을 수 없습니다.")
+            raise ValueError("Integration name is empty. Pass a non-empty --name value such as 'builder-bot'.")
+        if not role:
+            raise ValueError("Integration role is empty. Pass a non-empty --role value such as 'builder'.")
         if not endpoint:
-            raise ValueError("endpoint는 비어 있을 수 없습니다.")
+            raise ValueError("Integration endpoint is empty. Pass --endpoint or let the CLI use the local://<name> default.")
         if auto_script and not cmd.strip():
-            raise ValueError("auto_script=True일 때 cmd는 비어 있을 수 없습니다.")
+            raise ValueError(
+                "Delegate script generation requires a command. Set --cmd or disable auto script generation with --no-auto-script."
+            )
 
         existing = self._find(name)
         if existing and not allow_update:
@@ -175,7 +181,7 @@ class IntegrationManager:
             생성된 스크립트 절대 경로
         """
         if not cmd.strip():
-            raise ValueError("cmd는 비어 있을 수 없습니다.")
+            raise ValueError("cmd is empty for delegate script generation. Provide a runnable command such as 'amp --task'.")
 
         tmpl_path = template_path or os.path.normpath(
             os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts", "templates", "delegate.sh.tmpl")
@@ -236,7 +242,8 @@ class IntegrationManager:
         """
         if not self._find(name):
             raise IntegrationNotFoundError(
-                f"'{name}' 통합을 찾을 수 없습니다."
+                f"'{name}' 통합을 찾을 수 없습니다. "
+                "먼저 'python3 -m rolemesh integration list'로 현재 등록 상태를 확인하세요."
             )
         conn = self._client._conn_ctx()
         conn.execute("DELETE FROM capabilities WHERE agent_id = ?", (name,))
@@ -253,7 +260,10 @@ class IntegrationManager:
         """
         info = self._find(name)
         if not info:
-            raise IntegrationNotFoundError(f"'{name}' 통합을 찾을 수 없습니다.")
+            raise IntegrationNotFoundError(
+                f"'{name}' 통합을 찾을 수 없습니다. "
+                "먼저 'python3 -m rolemesh integration list'로 현재 등록 상태를 확인하세요."
+            )
         caps = self._get_capabilities(name)
         return {
             "name": info["agent_id"],

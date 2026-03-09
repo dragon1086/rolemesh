@@ -18,7 +18,7 @@ class CLIUsageError(CLIError):
         super().__init__(message, exit_code=2)
 
 
-def _usage():
+def _usage() -> None:
     print("사용법: python3 -m rolemesh <command>")
     print()
     print("Commands:")
@@ -46,12 +46,12 @@ def _parse_args(parser, args: list[str]):
         raise CLIUsageError(detail) from None
 
 
-def _cmd_init():
+def _cmd_init() -> None:
     from .installer import main
     main()
 
 
-def _cmd_agents():
+def _cmd_agents() -> None:
     import os
     from ..core.registry_client import RegistryClient
     db_path = os.environ.get("ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db"))
@@ -67,7 +67,7 @@ def _cmd_agents():
         print(f"{a['agent_id']:<20} {a['display_name']:<25} {a['status']}")
 
 
-def _cmd_status():
+def _cmd_status() -> None:
     import os
     from ..core.registry_client import RegistryClient
     db_path = os.environ.get("ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db"))
@@ -79,7 +79,7 @@ def _cmd_status():
         print(f"  {status:<15}: {cnt}")
 
 
-def _cmd_route(task_text: str):
+def _cmd_route(task_text: str) -> None:
     import os
     from ..core.registry_client import RegistryClient
     db_path = os.environ.get("ROLEMESH_DB", os.path.expanduser("~/rolemesh/rolemesh.db"))
@@ -200,8 +200,7 @@ def _integration_add(mgr, args: list[str]) -> None:
         if "script_path" in info:
             print(f"  delegate script: {info['script_path']}")
     except (DuplicateIntegrationError, ValueError) as e:
-        print(f"오류: {e}")
-        sys.exit(1)
+        raise CLIError(f"오류: {e}")
 
 
 def _integration_list(mgr) -> None:
@@ -228,15 +227,15 @@ def _integration_remove(mgr, args: list[str]) -> None:
         return
     parsed = _parse_args(parser, args)
 
+    from ..routing.integration import IntegrationNotFoundError
     try:
         mgr.remove(parsed.name)
         print(f"[integration] 삭제 완료: {parsed.name}")
     except IntegrationNotFoundError as e:
-        print(f"오류: {e}")
-        sys.exit(1)
+        raise CLIError(f"오류: {e}")
 
 
-def main():
+def main() -> None:
     args = sys.argv[1:]
     try:
         if not args or args[0] in ("-h", "--help"):
@@ -261,9 +260,10 @@ def main():
                 _usage_error("사용법: python3 -m rolemesh integration <add|list|remove> [options]")
             _cmd_integration(args[1:])
         else:
-            print(f"알 수 없는 명령: {cmd}")
-            _usage()
-            sys.exit(1)
+            raise CLIUsageError(
+                f"알 수 없는 명령: {cmd}\n"
+                "지원 명령을 확인하려면 'python3 -m rolemesh --help'를 실행하세요."
+            )
     except CLIError as exc:
         print(exc)
         sys.exit(exc.exit_code)

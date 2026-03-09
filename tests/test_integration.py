@@ -80,8 +80,13 @@ def test_add_empty_name_raises(mgr):
 
 
 def test_add_empty_endpoint_raises(mgr):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Pass --endpoint"):
         mgr.add("bot-x", role="builder", endpoint="")
+
+
+def test_add_empty_role_raises(mgr):
+    with pytest.raises(ValueError, match="--role"):
+        mgr.add("bot-x", role="   ", endpoint="http://localhost:9000")
 
 
 def test_init_with_relative_db_path():

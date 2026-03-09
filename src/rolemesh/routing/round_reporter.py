@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import signal
@@ -22,6 +23,7 @@ DB = os.path.expanduser("~/ai-comms/registry.db")
 PID_FILE = "/tmp/rolemesh-round-reporter.pid"
 SOURCE = "rolemesh-autoevo"
 STATE_FILE = "/tmp/rolemesh-round-reporter.last"
+logger = logging.getLogger(__name__)
 
 
 def _send_event(text: str) -> None:
@@ -179,7 +181,7 @@ def _record_quality_scores(
             continue
 
 
-def run_loop(poll: int = 20):
+def run_loop(poll: int = 20) -> None:
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     quality_tracker = QualityTracker(DB)
@@ -207,11 +209,11 @@ def run_loop(poll: int = 20):
                     f.write(str(r))
             time.sleep(poll)
         except Exception as e:
-            print(f"[round-reporter] {e}", file=sys.stderr)
+            logger.exception("round reporter loop failed: %s", e)
             time.sleep(poll)
 
 
-def daemonize():
+def daemonize() -> None:
     if os.fork() > 0:
         sys.exit(0)
     os.setsid()
@@ -231,7 +233,7 @@ def daemonize():
     signal.signal(signal.SIGINT, _cleanup)
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--poll", type=int, default=20)
     p.add_argument("--daemon", action="store_true")
