@@ -6,30 +6,38 @@
     # 헬스체크 후 호출
     if is_amp_available():
         result = ask_amp('삼성전자 지금 매수 타이밍이야?')
-        print(result['answer'])
+        answer = result['answer']
     else:
-        print("amp 서버 오프라인")
+        answer = "amp 서버 오프라인"
 
     # 비교 질문 → 자동으로 debate (4-round) 선택
     result = ask_amp('성장주 vs 가치주 지금 어느 게 낫나?')
 
     # 폴백 확인
     if result.get('fallback'):
-        print(f"폴백 이유: {result['reason']}")
+        fallback_reason = result['reason']
 """
 
-import json
-import re
-import time
+from __future__ import annotations
+
 import asyncio
+import json
+import logging
+import re
+import sys
+import time
+from pathlib import Path
+
 import httpx
-from typing import Optional
+from typing import Any, Optional
 
 # amp MCP 서버 주소
 AMP_MCP_URL = "http://127.0.0.1:3010"
 CB_STATE_FILE = "/tmp/amp-circuit-breaker.json"
 CB_OPEN_SEC = 600  # 10분
 AMP_TIMEOUT_LOG = "/tmp/amp-timeouts.jsonl"
+
+logger = logging.getLogger(__name__)
 
 # 상록 기본 프로필 컨텍스트
 DEFAULT_PROFILE = (
@@ -48,20 +56,21 @@ _DEBATE_PATTERNS = [
 
 
 
-def _cb_state() -> dict:
+def _cb_state() -> dict[str, Any]:
     try:
-        with open(CB_STATE_FILE, 'r', encoding='utf-8') as f:
+        with Path(CB_STATE_FILE).open('r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        logger.debug("Failed to load amp circuit breaker state from %s: %s", CB_STATE_FILE, exc)
         return {"opened_until": 0, "failures": 0, "last_error": ""}
 
 
-def _cb_save(st: dict) -> None:
+def _cb_save(st: dict[str, Any]) -> None:
     try:
-        with open(CB_STATE_FILE, 'w', encoding='utf-8') as f:
+        with Path(CB_STATE_FILE).open('w', encoding='utf-8') as f:
             json.dump(st, f, ensure_ascii=False)
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.debug("Failed to save amp circuit breaker state to %s: %s", CB_STATE_FILE, exc)
 
 
 def _cb_open(last_error: str) -> None:
@@ -96,10 +105,14 @@ def _log_timeout_event(event: str, tool: str, timeout_s: float, attempt: int, er
             "error": (error or "")[:300],
             "circuit_open": circuit_open,
         }
-        with open(AMP_TIMEOUT_LOG, "a", encoding="utf-8") as f:
+        with Path(AMP_TIMEOUT_LOG).open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.debug("Failed to append amp timeout log to %s: %s", AMP_TIMEOUT_LOG, exc)
+
+
+def _emit_line(text: str = "") -> None:
+    sys.stdout.write(f"{text}\n")
 
 
 def _fallback_response(tool: str, reason: str, answer: str, *, raw: Optional[dict] = None) -> dict:
@@ -153,8 +166,8 @@ def _parse_response(raw: dict) -> dict:
     if cser_match:
         try:
             cser = float(cser_match.group(1))
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("Failed to parse CSER value from amp response %r: %s", cser_match.group(1), exc)
 
     return {
         "answer": text,
@@ -184,7 +197,8 @@ def is_amp_available(timeout: int = 5) -> bool:
         return True
     except (httpx.ConnectError, httpx.TimeoutException):
         return False
-    except Exception:
+    except Exception as exc:
+        logger.debug("Unexpected amp availability check failure: %s", exc)
         return False
 
 
@@ -353,14 +367,13 @@ async def ask_amp_async(
 
 
 if __name__ == "__main__":
-    import sys
     query = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "삼성전자 지금 들어가도 될까?"
-    print(f"질문: {query}")
-    print(f"amp 서버 상태: {'✅ 온라인' if is_amp_available() else '❌ 오프라인'}")
+    _emit_line(f"질문: {query}")
+    _emit_line(f"amp 서버 상태: {'✅ 온라인' if is_amp_available() else '❌ 오프라인'}")
     result = ask_amp(query)
     if result.get("fallback"):
-        print(f"\n⚠️ 폴백 (이유: {result['reason']})")
+        _emit_line(f"\n⚠️ 폴백 (이유: {result['reason']})")
     else:
-        print(f"\n도구: {result['tool_used']}")
-        print(f"CSER: {result['cser_text']}")
-        print(f"\n답변:\n{result['answer']}")
+        _emit_line(f"\n도구: {result['tool_used']}")
+        _emit_line(f"CSER: {result['cser_text']}")
+        _emit_line(f"\n답변:\n{result['answer']}")

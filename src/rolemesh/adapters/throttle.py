@@ -8,6 +8,7 @@ Config: ~/rolemesh/config/throttle.yaml (optional).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -22,6 +23,8 @@ except ImportError:
 _STATE_DIR = Path("/tmp")
 _STATE_PREFIX = "rolemesh-throttle-"
 _CONFIG_PATH = Path.home() / "rolemesh" / "config" / "throttle.yaml"
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_RPM: dict[str, int] = {
     "anthropic": 20,
@@ -39,8 +42,8 @@ def _load_config() -> dict[str, int]:
             merged = dict(DEFAULT_RPM)
             merged.update({k: int(v) for k, v in data.items()})
             return merged
-        except Exception:
-            pass
+        except (OSError, TypeError, ValueError) as exc:
+            logger.debug("Failed to load throttle config from %s: %s", _CONFIG_PATH, exc)
     return dict(DEFAULT_RPM)
 
 
@@ -55,8 +58,8 @@ def _load_state(provider: str, capacity: int) -> dict:
         # Validate expected keys exist
         if "tokens" in data and "last_refill" in data:
             return data
-    except Exception:
-        pass
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        logger.debug("Failed to load throttle state for provider=%s: %s", provider, exc)
     return {"tokens": float(capacity), "last_refill": time.time()}
 
 
@@ -70,8 +73,8 @@ def _save_state(provider: str, data: dict) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, path)
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.debug("Failed to save throttle state for provider=%s: %s", provider, exc)
 
 
 class TokenBucketThrottle:

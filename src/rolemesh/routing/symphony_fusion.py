@@ -15,9 +15,11 @@ Symphony × MACRS Fusion Orchestrator
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
+import sys
 import time
 import uuid
 from dataclasses import dataclass, asdict
@@ -43,6 +45,8 @@ except Exception:
 PM_QUALITY_LOG = os.path.expanduser("~/ai-comms/pm_packet_quality.jsonl")
 CONTRACT_ARTIFACT_DIR = os.path.expanduser("~/ai-comms/contracts")
 PARALLEL_CAP = 3
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -261,8 +265,8 @@ class SymphonyMACRS:
             os.makedirs(os.path.dirname(PM_QUALITY_LOG), exist_ok=True)
             with open(PM_QUALITY_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to append PM packet quality log to %s: %s", PM_QUALITY_LOG, exc)
 
     def classify(self, text: str) -> str:
         t = text.lower()
@@ -320,8 +324,8 @@ class SymphonyMACRS:
                         "reason": "pending cokac inbox exists",
                         "pending_count": len(pending),
                     }
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to inspect cokac inbox at %s: %s", inbox_dir, exc)
 
         packet = self._build_pm_packet(item)
         gate = packet.get("intent_gate", {})
@@ -483,11 +487,14 @@ def main() -> None:
     out = orch.run_goal(args.goal)
 
     if args.json:
-        print(json.dumps(out, ensure_ascii=False, indent=2))
+        json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
     else:
-        print(f"🎼 Goal: {out['goal']}")
+        sys.stdout.write(f"🎼 Goal: {out['goal']}\n")
         for r in out["results"]:
-            print(f"- [{r['status']}] {r['assignee']} :: {r['summary']} ({r['duration_ms']}ms)")
+            sys.stdout.write(
+                f"- [{r['status']}] {r['assignee']} :: {r['summary']} ({r['duration_ms']}ms)\n"
+            )
 
 
 if __name__ == "__main__":

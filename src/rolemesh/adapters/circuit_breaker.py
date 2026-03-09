@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from enum import Enum
@@ -21,6 +22,8 @@ class CBState(str, Enum):
 
 _STATE_DIR = Path("/tmp")
 _STATE_PREFIX = "rolemesh-cb-"
+
+logger = logging.getLogger(__name__)
 
 
 def _state_file(provider: str) -> Path:
@@ -40,7 +43,8 @@ def _load(provider: str) -> tuple[dict, bool]:
     try:
         with _state_file(provider).open("r", encoding="utf-8") as f:
             return json.load(f), False
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        logger.debug("Failed to load circuit breaker state for provider=%s: %s", provider, exc)
         return _default_state(), True
 
 
@@ -54,8 +58,8 @@ def _save(provider: str, data: dict) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, path)
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.debug("Failed to save circuit breaker state for provider=%s: %s", provider, exc)
 
 
 class ProviderCircuitBreaker:

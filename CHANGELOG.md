@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3] - 2026-03-09
+
+### Fixed
+- 30~31차 완성도 작업을 릴리스에 반영해 logging 전환, 입력 검증, 에러 메시지, `__all__`, docstring, 타입 힌트 정리를 공식화
+- `src/rolemesh/adapters/amp_caller.py`와 `src/rolemesh/routing/symphony_fusion.py`의 비-CLI `print()` 사용을 제거해 사용자 출력과 라이브러리 경계를 분리
+- `amp_caller`, `circuit_breaker`, `throttle`의 상태 파일/로그 파일 저장 실패를 무음 `pass` 대신 디버그 로그로 남기도록 보강
+
 ## [0.2.2] - 2026-03-08
 
 ### Fixed
