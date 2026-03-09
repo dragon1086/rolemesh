@@ -180,6 +180,7 @@ def _integration_add(mgr, args: list[str]) -> None:
 
     caps = [c.strip() for c in parsed.capabilities.split(",") if c.strip()] if parsed.capabilities else []
     auto_script = not parsed.no_auto_script
+    endpoint_was_defaulted = not parsed.endpoint.strip()
     endpoint = parsed.endpoint or f"local://{parsed.name}"
 
     from ..routing.integration import DuplicateIntegrationError
@@ -194,11 +195,20 @@ def _integration_add(mgr, args: list[str]) -> None:
             provider=parsed.provider,
             auto_script=auto_script,
         )
-        print(f"[integration] 등록 완료: {info['name']} (role={info['role']}, endpoint={info['endpoint']})")
+        print(f"추가 완료: '{info['name']}' AI를 RoleMesh에 등록했습니다.")
+        print(f"역할: {info['role']}")
+        if endpoint_was_defaulted:
+            print(f"연결 주소: {info['endpoint']}  (입력하지 않아 자동으로 채움)")
+        else:
+            print(f"연결 주소: {info['endpoint']}")
         if info["capabilities"]:
-            print(f"  capabilities: {', '.join(info['capabilities'])}")
+            print(f"할 수 있는 일: {', '.join(info['capabilities'])}")
         if "script_path" in info:
-            print(f"  delegate script: {info['script_path']}")
+            print(f"실행 스크립트: {info['script_path']}")
+            print("이제 이 스크립트를 통해 RoleMesh가 해당 AI를 호출할 수 있습니다.")
+        else:
+            print("실행 스크립트는 만들지 않았습니다. 필요하면 --cmd를 지정해 다시 추가하세요.")
+        print("확인 명령: rolemesh integration list")
     except (DuplicateIntegrationError, ValueError) as e:
         raise CLIError(f"오류: {e}")
 

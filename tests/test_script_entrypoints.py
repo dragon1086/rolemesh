@@ -1,7 +1,13 @@
 from pathlib import Path
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_pyproject_exposes_rolemesh_console_script():
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["scripts"]["rolemesh"] == "rolemesh.__main__:main"
 
 
 def test_rolemesh_init_uses_cli_installer_module():
