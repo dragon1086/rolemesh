@@ -1,0 +1,24 @@
+services:
+  benchmark:
+    build: .
+    container_name: e2e-benchmark
+    env_file:
+      - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./results:/app/results
+      - ./scenarios:/app/scenarios
+    restart: "no"
+
+  results-viewer:
+    image: nginx:alpine
+    container_name: benchmark-results
+    ports:
+      - "8080:80"
+    volumes:
+      - ./results:/usr/share/nginx/html:ro
+    depends_on:
+      - benchmark
+    restart: unless-stopped
