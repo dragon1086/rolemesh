@@ -14,6 +14,42 @@ from typing import Optional
 
 DEFAULT_DB_PATH = os.path.expanduser("~/rolemesh/rolemesh.db")
 
+# questionary 없으면 input() 폴백
+try:
+    import questionary
+    HAS_QUESTIONARY = True
+except ImportError:
+    HAS_QUESTIONARY = False
+
+
+def _ask_confirm(message: str, default: bool = True) -> bool:
+    """Y/n 확인 프롬프트. questionary 없으면 input() 폴백."""
+    if HAS_QUESTIONARY:
+        return questionary.confirm(message, default=default).ask()
+    hint = "[Y/n]" if default else "[y/N]"
+    raw = input(f"{message} {hint}: ").strip().lower()
+    if raw == "":
+        return default
+    return raw in ("y", "yes")
+
+
+def _ask_text(message: str, default: str = "") -> str:
+    """텍스트 입력 프롬프트."""
+    if HAS_QUESTIONARY:
+        return questionary.text(message, default=default).ask() or default
+    hint = f" [{default}]" if default else ""
+    raw = input(f"{message}{hint}: ").strip()
+    return raw if raw else default
+
+
+def _print_box(lines: list, width: int = 56) -> None:
+    """간단한 박스 출력."""
+    print("┌" + "─" * (width - 2) + "┐")
+    for line in lines:
+        padded = line.ljust(width - 4)
+        print(f"│  {padded}  │")
+    print("└" + "─" * (width - 2) + "┘")
+
 
 @dataclass
 class Environment:
@@ -47,27 +83,48 @@ class RoleMeshInstaller:
     def detect_environment(self) -> Environment:
         """시스템에서 사용 가능한 도구와 환경변수를 탐지."""
         env = Environment()
-
-        # claude 바이너리
         env.claude_path = shutil.which("claude")
         env.has_claude = env.claude_path is not None
-
-        # openclaw 바이너리
         env.openclaw_path = shutil.which("openclaw")
         env.has_openclaw = env.openclaw_path is not None
-
-        # amp 바이너리
         env.amp_path = shutil.which("amp")
         env.has_amp = env.amp_path is not None
-
-        # python 버전
         env.python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-
-        # 환경변수
         env.anthropic_model = os.environ.get("ANTHROPIC_MODEL")
         env.has_oauth_token = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
-
         return env
+
+    # ── 연결 테스트 ────────────────────────────────────────────
+
+    def health_check(self, env: Environment) -> dict:
+        """각 도구의 실행 가능 여부를 테스트."""
+        results = {}
+
+        def _check(name, path):
+            if not path:
+                results[name] = (False, "바이너리 미감지")
+                return
+            try:
+                out = subprocess.run(
+                    [path, "--version"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if out.returncode == 0:
+                    ver = (out.stdout or out.stderr).strip().split("\n")[0]
+                    results[name] = (True, ver)
+                else:
+                    results[name] = (False, f"exit {out.returncode}")
+            except Exception as e:
+                results[name] = (False, str(e))
+
+        if env.claude_path:
+            _check("claude", env.claude_path)
+        if env.openclaw_path:
+            _check("openclaw", env.openclaw_path)
+        if env.amp_path:
+            _check("amp", env.amp_path)
+
+        return results
 
     # ── 역할 추천 ──────────────────────────────────────────────
 
@@ -75,7 +132,6 @@ class RoleMeshInstaller:
         """감지된 환경 기반으로 역할 구성을 추천."""
         roles: list[RoleConfig] = []
 
-        # PM — openclaw 감지 시 자동 배정
         if env.has_openclaw:
             roles.append(RoleConfig(
                 role="PM",
@@ -83,17 +139,14 @@ class RoleMeshInstaller:
                 display_name="PM (OpenClaw)",
                 description="프로젝트 관리, 태스크 라우팅, 팀 조율",
                 tool="openclaw",
-                capabilities=[
-                    {
-                        "name": "project_management",
-                        "description": "태스크 계획, 우선순위 지정, 팀 조율",
-                        "keywords": ["계획", "관리", "조율", "우선순위", "pm", "plan", "manage"],
-                        "cost_level": "medium",
-                    }
-                ],
+                capabilities=[{
+                    "name": "project_management",
+                    "description": "태스크 계획, 우선순위 지정, 팀 조율",
+                    "keywords": ["계획", "관리", "조율", "우선순위", "pm", "plan", "manage"],
+                    "cost_level": "medium",
+                }],
             ))
 
-        # Builder — claude 감지 시 자동 배정
         if env.has_claude:
             roles.append(RoleConfig(
                 role="Builder",
@@ -101,17 +154,14 @@ class RoleMeshInstaller:
                 display_name="Builder (Claude Code)",
                 description="코드 작성, 버그 수정, 구현",
                 tool="claude",
-                capabilities=[
-                    {
-                        "name": "code_write",
-                        "description": "코드 구현, 리팩토링, 버그 수정",
-                        "keywords": ["코드", "구현", "개발", "버그", "code", "build", "fix", "implement"],
-                        "cost_level": "high",
-                    }
-                ],
+                capabilities=[{
+                    "name": "code_write",
+                    "description": "코드 구현, 리팩토링, 버그 수정",
+                    "keywords": ["코드", "구현", "개발", "버그", "code", "build", "fix", "implement"],
+                    "cost_level": "high",
+                }],
             ))
 
-        # Analyst — amp 감지 시 자동 배정
         if env.has_amp:
             roles.append(RoleConfig(
                 role="Analyst",
@@ -119,17 +169,14 @@ class RoleMeshInstaller:
                 display_name="Analyst (amp)",
                 description="데이터 분석, 전략 검토, 인사이트 도출",
                 tool="amp",
-                capabilities=[
-                    {
-                        "name": "emergent_analysis",
-                        "description": "데이터 분석, 전략 검토, 인사이트 도출",
-                        "keywords": ["분석", "검토", "전략", "인사이트", "analyze", "review", "strategy"],
-                        "cost_level": "medium",
-                    }
-                ],
+                capabilities=[{
+                    "name": "emergent_analysis",
+                    "description": "데이터 분석, 전략 검토, 인사이트 도출",
+                    "keywords": ["분석", "검토", "전략", "인사이트", "analyze", "review", "strategy"],
+                    "cost_level": "medium",
+                }],
             ))
 
-        # 라이트 모드: 아무것도 없으면 최소 구성 (PM + Builder 더미)
         if not roles:
             roles.append(RoleConfig(
                 role="PM",
@@ -137,14 +184,12 @@ class RoleMeshInstaller:
                 display_name="PM (로컬)",
                 description="로컬 프로젝트 관리자 (라이트 모드)",
                 tool=None,
-                capabilities=[
-                    {
-                        "name": "project_management",
-                        "description": "태스크 계획 및 관리",
-                        "keywords": ["계획", "관리", "plan"],
-                        "cost_level": "low",
-                    }
-                ],
+                capabilities=[{
+                    "name": "project_management",
+                    "description": "태스크 계획 및 관리",
+                    "keywords": ["계획", "관리", "plan"],
+                    "cost_level": "low",
+                }],
             ))
 
         return roles
@@ -152,11 +197,8 @@ class RoleMeshInstaller:
     # ── DB 초기화 ──────────────────────────────────────────────
 
     def init_database(self) -> None:
-        """rolemesh.db 경로에 DB 초기화."""
         db_dir = os.path.dirname(self.db_path)
         os.makedirs(db_dir, exist_ok=True)
-
-        # init_db.py의 init_db() 호출
         from ..core.init_db import init_db
         conn = init_db(self.db_path)
         conn.close()
@@ -164,7 +206,6 @@ class RoleMeshInstaller:
     # ── 에이전트 등록 ──────────────────────────────────────────
 
     def register_roles(self, roles: list[RoleConfig]) -> None:
-        """추천된 역할들을 registry에 등록."""
         from ..core.registry_client import RegistryClient
         client = RegistryClient(db_path=self.db_path)
         try:
@@ -185,137 +226,162 @@ class RoleMeshInstaller:
         finally:
             client.close()
 
-    # ── 출력 헬퍼 ─────────────────────────────────────────────
+    # ── 인터랙티브 실행 ────────────────────────────────────────
 
-    @staticmethod
-    def _print_header() -> None:
+    def run(self, interactive: bool = True) -> None:
+        """인터랙티브 마법사 모드. --non-interactive 시 자동 실행."""
         print()
-        print("=" * 56)
-        print("  RoleMesh Installer Wizard v0.1")
-        print("  로컬 AI 팀을 15분 내에 구성합니다.")
-        print("=" * 56)
+        _print_box([
+            "RoleMesh Installer Wizard v0.2",
+            "로컬 AI 팀을 15분 내에 구성합니다.",
+            "",
+            "Ctrl+C 로 언제든 중단 가능.",
+        ])
         print()
 
-    @staticmethod
-    def _print_env_summary(env: Environment) -> None:
-        print("[1/4] 환경 탐지 결과")
+        # ── Step 1: 환경 탐지 ──
+        print("▶ [1/5] 환경 탐지 중...")
+        env = self.detect_environment()
         print(f"  Python       : {env.python_version}")
-        print(f"  claude       : {'✓ ' + env.claude_path if env.has_claude else '✗ 미감지'}")
-        print(f"  openclaw     : {'✓ ' + env.openclaw_path if env.has_openclaw else '✗ 미감지'}")
-        print(f"  amp          : {'✓ ' + env.amp_path if env.has_amp else '✗ 미감지'}")
-        print(f"  ANTHROPIC_MODEL      : {env.anthropic_model or '미설정'}")
-        print(f"  CLAUDE_CODE_OAUTH_TOKEN : {'설정됨' if env.has_oauth_token else '미설정'}")
+        print(f"  claude       : {'✓  ' + (env.claude_path or '') if env.has_claude else '✗  미감지'}")
+        print(f"  openclaw     : {'✓  ' + (env.openclaw_path or '') if env.has_openclaw else '✗  미감지'}")
+        print(f"  amp          : {'✓  ' + (env.amp_path or '') if env.has_amp else '✗  미감지'}")
+        print(f"  OAUTH 토큰   : {'설정됨 ✓' if env.has_oauth_token else '미설정'}")
         print()
 
-    @staticmethod
-    def _print_roles(roles: list[RoleConfig]) -> None:
-        print("[2/4] 추천 역할 구성")
-        for r in roles:
-            tool_info = f" ({r.tool})" if r.tool else ""
-            print(f"  [{r.role}]{tool_info} → {r.display_name}")
-            print(f"         {r.description}")
-        print()
+        if interactive and not _ask_confirm("환경 탐지 완료. 계속할까요?", default=True):
+            print("설치를 취소했습니다.")
+            return
 
-    @staticmethod
-    def _print_completion(roles: list[RoleConfig], db_path: str):
-        print("[4/4] 설치 완료!")
+        # ── Step 2: 역할 추천 + 확인 ──
         print()
-        print("  구성된 역할:")
-        for r in roles:
-            print(f"    - {r.role:10s} : {r.display_name}")
+        print("▶ [2/5] 역할 추천")
+        roles = self.recommend_roles(env)
+        confirmed_roles = []
+
+        for role in roles:
+            tool_info = f" ({role.tool})" if role.tool else ""
+            print(f"\n  [{role.role}]{tool_info}")
+            print(f"  설명: {role.description}")
+            if interactive:
+                include = _ask_confirm(f"  '{role.display_name}' 역할을 포함할까요?", default=True)
+                if include:
+                    confirmed_roles.append(role)
+                else:
+                    print(f"  → '{role.role}' 제외됨")
+            else:
+                confirmed_roles.append(role)
+
+        if not confirmed_roles:
+            print("\n⚠️  역할이 하나도 선택되지 않았습니다. 라이트 모드로 전환합니다.")
+            self.run_lite()
+            return
+
+        # ── Step 3: 연결 테스트 ──
         print()
-        print(f"  DB 위치: {db_path}")
+        print("▶ [3/5] 연결 테스트 중...")
+        health = self.health_check(env)
+        has_failure = False
+
+        for tool, (ok, info) in health.items():
+            status = "✓" if ok else "✗"
+            print(f"  {status}  {tool}: {info}")
+            if not ok:
+                has_failure = True
+
+        if has_failure and interactive:
+            print()
+            print("  ⚠️  일부 도구 연결에 실패했습니다.")
+            print("  힌트: 경로 문제라면 'which claude' 로 확인하세요.")
+            lite = _ask_confirm("  라이트 모드(PM만)로 계속할까요?", default=True)
+            if lite:
+                self.run_lite()
+                return
+
+        # ── Step 4: DB 초기화 ──
         print()
-        print("  첫 사용 예시:")
-        print("    python3 -m rolemesh status")
-        print("    python3 -m rolemesh route '코드 리뷰해줘'")
-        print("    python3 -m rolemesh agents")
+        print("▶ [4/5] DB 초기화 중...")
+        self.init_database()
+        print(f"  → {self.db_path} 생성 완료")
+
+        # ── Step 5: 에이전트 등록 + 완료 ──
         print()
-        print("  문서: ~/rolemesh/docs/")
-        print("=" * 56)
+        print("▶ [5/5] 에이전트 등록 중...")
+        self.register_roles(confirmed_roles)
+        for r in confirmed_roles:
+            print(f"  ✓  {r.role}: {r.display_name}")
+
+        print()
+        _print_box([
+            "✅  설치 완료!",
+            "",
+            "구성된 역할:",
+        ] + [f"  • {r.role:10s}: {r.display_name}" for r in confirmed_roles] + [
+            "",
+            "첫 번째 명령어:",
+            "  rolemesh status",
+            "  rolemesh route '코드 리뷰해줘'",
+            "  rolemesh agents",
+            "",
+            f"DB: {self.db_path}",
+            "문서: ~/rolemesh/docs/",
+        ])
         print()
 
     # ── 라이트 모드 ───────────────────────────────────────────
 
     def run_lite(self) -> None:
-        """라이트 모드: DB 초기화 + PM 역할만 등록. sqlite3만 필요. 워커 미실행."""
+        """라이트 모드: DB 초기화 + PM 역할만 등록."""
         print()
-        print("=" * 56)
-        print("  RoleMesh Lite Mode")
-        print("  최소 구성: DB 초기화 + PM 역할 등록만 수행.")
-        print("=" * 56)
+        _print_box([
+            "RoleMesh Lite Mode",
+            "최소 구성: DB 초기화 + PM 역할만 등록.",
+        ])
         print()
 
-        # DB 초기화
-        print("[1/2] DB 초기화 중...")
+        print("▶ [1/2] DB 초기화 중...")
         self.init_database()
         print(f"  → {self.db_path} 생성 완료")
         print()
 
-        # PM 역할만 등록 (openclaw 또는 local-pm)
         env = self.detect_environment()
         roles = self.recommend_roles(env)
         pm_roles = [r for r in roles if r.role == "PM"]
         if not pm_roles:
-            pm_roles = [
-                RoleConfig(
-                    role="PM",
-                    agent_id="local-pm",
-                    display_name="PM (로컬)",
-                    description="로컬 프로젝트 관리자 (라이트 모드)",
-                    tool=None,
-                    capabilities=[
-                        {
-                            "name": "project_management",
-                            "description": "태스크 계획 및 관리",
-                            "keywords": ["계획", "관리", "plan"],
-                            "cost_level": "low",
-                        }
-                    ],
-                )
-            ]
+            pm_roles = [RoleConfig(
+                role="PM",
+                agent_id="local-pm",
+                display_name="PM (로컬)",
+                description="로컬 프로젝트 관리자 (라이트 모드)",
+                tool=None,
+                capabilities=[{
+                    "name": "project_management",
+                    "description": "태스크 계획 및 관리",
+                    "keywords": ["계획", "관리", "plan"],
+                    "cost_level": "low",
+                }],
+            )]
 
-        print("[2/2] PM 역할 등록 중...")
+        print("▶ [2/2] PM 역할 등록 중...")
         self.register_roles(pm_roles)
         for r in pm_roles:
-            print(f"  → {r.role}: {r.display_name} 등록 완료")
+            print(f"  ✓  {r.role}: {r.display_name}")
+
         print()
-        print(f"  DB 위치: {self.db_path}")
-        print("  라이트 모드 완료. Builder/Analyst는 'python3 -m rolemesh init' 으로 추가 가능.")
-        print("=" * 56)
+        _print_box([
+            "라이트 모드 완료.",
+            f"DB: {self.db_path}",
+            "",
+            "Builder/Analyst 추가: rolemesh init",
+        ])
         print()
-
-    # ── 메인 실행 ─────────────────────────────────────────────
-
-    def run(self) -> None:
-        """인터랙티브 없이 자동으로 환경 탐지 → 역할 추천 → DB 초기화 → 등록."""
-        self._print_header()
-
-        # 1. 환경 탐지
-        env = self.detect_environment()
-        self._print_env_summary(env)
-
-        # 2. 역할 추천
-        roles = self.recommend_roles(env)
-        self._print_roles(roles)
-
-        # 3. DB 초기화
-        print("[3/4] DB 초기화 중...")
-        self.init_database()
-        print(f"  → {self.db_path} 생성 완료")
-        print()
-
-        # 4. 에이전트 등록
-        self.register_roles(roles)
-
-        # 5. 완료 요약
-        self._print_completion(roles, self.db_path)
 
 
 def main():
     import argparse
     parser = argparse.ArgumentParser(prog="rolemesh init", add_help=False)
-    parser.add_argument("--lite", action="store_true", help="라이트 모드: DB 초기화 + PM 역할만 등록 (워커 미실행)")
+    parser.add_argument("--lite", action="store_true", help="라이트 모드: DB 초기화 + PM 역할만 등록")
+    parser.add_argument("--non-interactive", action="store_true", help="자동 모드 (확인 없이 실행)")
     parser.add_argument("--db", default=None, help="DB 경로 재정의")
     parsed, _ = parser.parse_known_args()
 
@@ -325,7 +391,7 @@ def main():
     if parsed.lite:
         installer.run_lite()
     else:
-        installer.run()
+        installer.run(interactive=not parsed.non_interactive)
 
 
 if __name__ == "__main__":
